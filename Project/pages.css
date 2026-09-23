@@ -646,3 +646,8 @@ input {
         gap: 34px
     }
 }
+
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 28px; padding: 4px; background: #dce6e8; }
+.login-tab { padding: 11px; border: 0; background: transparent; color: var(--muted); font: 700 12px Manrope, sans-serif; cursor: pointer; }
+.login-tab.active { background: var(--paper); color: var(--ink); }
+.role-login-form[hidden] { display: none; }
