@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, render_template, send_from_directory
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory
+
+from database import DuplicateBusinessIdError, DatabaseConfigurationError, save_startup_registration
 
 
 ROOT = Path(__file__).parent
@@ -32,6 +34,18 @@ def challenges():
 
 @app.post("/api/register")
 def register():
+    data = request.get_json(silent=True) or request.form.to_dict()
+    try:
+        save_startup_registration(data)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except DuplicateBusinessIdError:
+        return jsonify({"ok": False, "message": "That business ID is already in use."}), 409
+    except DatabaseConfigurationError as error:
+        return jsonify({"ok": False, "message": str(error)}), 503
+    except Exception:
+        app.logger.exception("Startup registration failed")
+        return jsonify({"ok": False, "message": "Registration could not be saved. Please try again."}), 500
     return jsonify({"ok": True, "message": "Your startup application has been received."})
 
 

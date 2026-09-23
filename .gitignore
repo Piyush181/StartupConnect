@@ -1,0 +1,12 @@
+# VS Code workspace settings
+.vscode/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
