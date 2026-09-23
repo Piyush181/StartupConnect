@@ -1,6 +1,9 @@
 from pathlib import Path
+from datetime import timedelta
+import os
+from functools import wraps
 
-from flask import Flask, jsonify, redirect, render_template, request, send_from_directory
+from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
 
 from database import (
     DatabaseConfigurationError,
@@ -13,6 +16,25 @@ from database import (
 
 ROOT = Path(__file__).parent
 app = Flask(__name__, static_folder=str(ROOT), template_folder=str(ROOT))
+app.secret_key = os.getenv("STARTUP_CONNECT_SESSION_SECRET", "development-only-change-this-session-secret")
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.getenv("STARTUP_CONNECT_COOKIE_SECURE", "false").lower() == "true",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=2),
+)
+
+
+def session_required(role: str):
+    """Require an authenticated Flask session with the expected role."""
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if session.get("role") != role:
+                return redirect("/login")
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
 
 
 @app.get("/")
@@ -27,7 +49,7 @@ def pages_stylesheet():
 
 @app.get("/<page>")
 def page(page):
-    pages = {"directory", "how-it-works", "resources", "login", "join", "register", "startup-portal", "ministry-portal"}
+    pages = {"directory", "how-it-works", "resources", "login", "join", "register"}
     if page in pages:
         return render_template(f"{page}.htm")
     return ("Page not found", 404)
@@ -70,7 +92,28 @@ def login():
         return jsonify({"ok": False, "message": str(error)}), 503
     if not valid:
         return jsonify({"ok": False, "message": "The credentials could not be verified."}), 401
+    session.clear()
+    session.permanent = True
+    session["role"] = role
     return jsonify({"ok": True, "message": "Sign in successful.", "redirect": landing_page})
+
+
+@app.post("/api/logout")
+def logout():
+    session.clear()
+    return jsonify({"ok": True})
+
+
+@app.get("/startup-portal")
+@session_required("startup")
+def startup_portal():
+    return render_template("startup-portal.htm")
+
+
+@app.get("/ministry-portal")
+@session_required("ministry")
+def ministry_portal():
+    return render_template("ministry-portal.htm")
 
 
 @app.get("/api/network")
