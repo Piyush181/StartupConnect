@@ -4,7 +4,13 @@ from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory
 
-from database import DuplicateBusinessIdError, DatabaseConfigurationError, save_startup_registration
+from database import (
+    DatabaseConfigurationError,
+    DuplicateBusinessIdError,
+    authenticate_ministry,
+    authenticate_startup,
+    save_startup_registration,
+)
 
 
 ROOT = Path(__file__).parent
@@ -280,7 +286,7 @@ def pages_stylesheet():
 
 @app.get("/<page>")
 def page(page):
-    pages = {"directory", "how-it-works", "resources", "login", "join", "register", "government-dashboard", "create-challenge"}
+    pages = {"directory", "how-it-works", "resources", "login", "join", "register", "startup-portal", "ministry-portal"}
     if page in pages:
         return render_template(f"{page}.htm")
     return ("Page not found", 404)
@@ -393,7 +399,20 @@ def register():
 
 @app.post("/api/login")
 def login():
-    return jsonify({"ok": True, "message": "Demo sign-in accepted"})
+    data = request.get_json(silent=True) or request.form.to_dict()
+    role = data.get("role", "startup")
+    try:
+        if role == "ministry":
+            valid = authenticate_ministry(data.get("ministry_id", ""), data.get("auth_code", ""))
+            landing_page = "/ministry-portal"
+        else:
+            valid = authenticate_startup(data.get("business_id", ""), data.get("gstin", ""), data.get("password", ""))
+            landing_page = "/startup-portal"
+    except (DatabaseConfigurationError, ValueError) as error:
+        return jsonify({"ok": False, "message": str(error)}), 503
+    if not valid:
+        return jsonify({"ok": False, "message": "The credentials could not be verified."}), 401
+    return jsonify({"ok": True, "message": "Sign in successful.", "redirect": landing_page})
 
 
 @app.get("/api/network")

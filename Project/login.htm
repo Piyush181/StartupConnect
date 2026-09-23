@@ -3,20 +3,27 @@
 {% block content %}
     <main class="container login-wrap">
         <section class="login-copy">
-            <div class="kicker">Welcome back</div>
+            <div class="kicker">Secure network access</div>
             <h1>Keep the work moving.</h1>
-            <p>Sign in to manage your applications, follow challenge updates and keep your team aligned through the
-                pilot.</p>
+            <p>Choose your side of the bridge to access the right workspace.</p>
         </section>
-        <form class="login-form" id="login-form">
-            <h2>Sign in</h2><label for="email">Work email</label><input id="email" name="email" type="email"
-                placeholder="you@company.com" required><label for="password">Password</label><input id="password"
-                name="password" type="password" placeholder="Enter your password" required>
-            <div class="form-row"><label><input type="checkbox"> Remember me</label><a
-                    href="mailto:support@startupconnect.in">Forgot password?</a></div><button class="button"
-                type="submit">Continue</button>
+        <div class="login-form login-panel">
+            <div class="login-tabs" role="tablist"><button class="login-tab active" type="button" data-role="startup">Startup</button><button class="login-tab" type="button" data-role="ministry">Ministry</button></div>
+            <form class="role-login-form" id="startup-login-form">
+                <h2>Startup sign in</h2>
+                <label for="business-id-login">Business ID</label><input id="business-id-login" name="business_id" autocomplete="username" required>
+                <label for="gstin-login">GSTIN number</label><input id="gstin-login" name="gstin" required>
+                <label for="startup-password">Password</label><input id="startup-password" name="password" type="password" autocomplete="current-password" required>
+                <button class="button" type="submit">Continue to startup portal</button>
+            </form>
+            <form class="role-login-form" id="ministry-login-form" hidden>
+                <h2>Ministry sign in</h2>
+                <label for="ministry-id">Ministry ID</label><input id="ministry-id" name="ministry_id" autocomplete="username" required>
+                <label for="auth-code">Auth code</label><input id="auth-code" name="auth_code" type="password" required>
+                <button class="button" type="submit">Continue to ministry portal</button>
+            </form>
             <div class="form-message" role="status"></div>
-        </form>
+        </div>
     </main>
     <footer class="footer">
         <div class="container">
@@ -38,5 +45,10 @@
             <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
         </div>
     </footer>
-    <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' }; document.querySelector('#login-form').onsubmit = async e => { e.preventDefault(); const r = await fetch('/api/login', { method: 'POST' }); const d = await r.json(); document.querySelector('.form-message').textContent = d.message };</script>
+    <script>
+        document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };
+        const message = document.querySelector('.form-message');
+        document.querySelectorAll('.login-tab').forEach(tab => tab.onclick = () => { document.querySelectorAll('.login-tab').forEach(item => item.classList.remove('active')); tab.classList.add('active'); document.querySelector('#startup-login-form').hidden = tab.dataset.role !== 'startup'; document.querySelector('#ministry-login-form').hidden = tab.dataset.role !== 'ministry'; message.textContent = ''; });
+        document.querySelectorAll('.role-login-form').forEach(form => form.onsubmit = async event => { event.preventDefault(); const payload = Object.fromEntries(new FormData(form)); payload.role = form.id.startsWith('ministry') ? 'ministry' : 'startup'; const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const result = await response.json(); message.textContent = result.message; if (result.ok) window.location.href = result.redirect; });
+    </script>
 {% endblock %}

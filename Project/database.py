@@ -6,11 +6,11 @@ encryption key outside source control and use the same key for future reads.
 
 import json
 import os
-from typing import Mapping
+from typing import Any, Mapping, cast
 
 import mysql.connector
 from cryptography.fernet import Fernet
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 # Replace these values manually, or set the matching environment variables.
@@ -37,7 +37,8 @@ class DatabaseConfigurationError(Exception):
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS startup_registrations (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    business_id VARCHAR(80) NOT NULL UNIQUE,
+    business_id_encrypted TEXT NOT NULL,
+    business_id_hash CHAR(64) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     business_name VARCHAR(255) NOT NULL,
     business_type VARCHAR(100) NOT NULL,
@@ -61,6 +62,15 @@ CREATE TABLE IF NOT EXISTS startup_registrations (
 )
 """
 
+MINFO_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS minfo (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    ministry_id_encrypted TEXT NOT NULL,
+    auth_code_encrypted TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
 
 def _cipher() -> Fernet:
     if ENCRYPTION_KEY.startswith("REPLACE_WITH"):
@@ -75,6 +85,13 @@ def _cipher() -> Fernet:
 
 def _encrypted(cipher: Fernet, value: str) -> str:
     return cipher.encrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def _lookup_hash(value: str) -> str:
+    """Create a stable lookup token without storing the identifier itself."""
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _required(data: Mapping[str, str], key: str) -> str:
@@ -99,7 +116,8 @@ def save_startup_registration(data: Mapping[str, str]) -> None:
         "phone": _required(data, "representative_phone"),
     }
     values = (
-        business_id,
+        _encrypted(cipher, business_id),
+        _lookup_hash(business_id),
         generate_password_hash(password),
         _required(data, "business_name"),
         _required(data, "business_type"),
@@ -128,20 +146,79 @@ def save_startup_registration(data: Mapping[str, str]) -> None:
     cursor = connection.cursor()
     try:
         cursor.execute(SCHEMA_SQL)
-        cursor.execute("SELECT id FROM startup_registrations WHERE business_id = %s", (business_id,))
+        cursor.execute("SELECT id FROM startup_registrations WHERE business_id_hash = %s", (_lookup_hash(business_id),))
         if cursor.fetchone():
             raise DuplicateBusinessIdError
         cursor.execute(
             """INSERT INTO startup_registrations (
-                business_id, password_hash, business_name, business_type,
+                business_id_encrypted, business_id_hash, password_hash, business_name, business_type,
                 cin_encrypted, ownership_details, incorporation_date, sector,
                 domain, employee_count, current_stage, company_address,
                 company_email, company_phone, website, pincode,
                 representative_encrypted, gstin_encrypted, gst_state, gst_details
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             values,
         )
         connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def _open_connection():
+    if MYSQL_CONFIG["user"].startswith("REPLACE_WITH") or MYSQL_CONFIG["password"].startswith("REPLACE_WITH"):
+        raise DatabaseConfigurationError("Fill in MYSQL_CONFIG before using database authentication.")
+    return mysql.connector.connect(**MYSQL_CONFIG)
+
+
+def _prepare_auth_tables(connection, cursor, cipher: Fernet) -> None:
+    cursor.execute(SCHEMA_SQL)
+    cursor.execute(MINFO_SCHEMA_SQL)
+    cursor.execute("SELECT id FROM minfo LIMIT 1")
+    if cursor.fetchone() is None:
+        cursor.execute(
+            "INSERT INTO minfo (ministry_id_encrypted, auth_code_encrypted) VALUES (%s, %s)",
+            (_encrypted(cipher, "admin"), _encrypted(cipher, "1234")),
+        )
+        connection.commit()
+
+
+def authenticate_startup(business_id: str, gstin: str, password: str) -> bool:
+    """Authenticate a startup using encrypted identifiers and a password hash."""
+    cipher = _cipher()
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        _prepare_auth_tables(connection, cursor, cipher)
+        cursor.execute(
+            "SELECT business_id_encrypted, gstin_encrypted, password_hash FROM startup_registrations WHERE business_id_hash = %s",
+            (_lookup_hash(business_id.strip()),),
+        )
+        row = cast(tuple[Any, ...] | None, cursor.fetchone())
+        if not row:
+            return False
+        stored_business_id = cipher.decrypt(row[0].encode()).decode()
+        stored_gstin = cipher.decrypt(row[1].encode()).decode()
+        return stored_business_id == business_id.strip() and stored_gstin == gstin.strip() and check_password_hash(row[2], password)
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def authenticate_ministry(ministry_id: str, auth_code: str) -> bool:
+    """Authenticate against the manually maintained encrypted minfo table."""
+    cipher = _cipher()
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        _prepare_auth_tables(connection, cursor, cipher)
+        cursor.execute("SELECT ministry_id_encrypted, auth_code_encrypted FROM minfo")
+        for row in cast(list[tuple[Any, ...]], cursor.fetchall()):
+            stored_id = cipher.decrypt(row[0].encode()).decode()
+            stored_code = cipher.decrypt(row[1].encode()).decode()
+            if stored_id == ministry_id.strip() and stored_code == auth_code:
+                return True
+        return False
     finally:
         cursor.close()
         connection.close()
