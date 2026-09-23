@@ -1,0 +1,42 @@
+{% extends "base.htm" %}
+
+{% block content %}
+    <main class="container login-wrap">
+        <section class="login-copy">
+            <div class="kicker">Welcome back</div>
+            <h1>Keep the work moving.</h1>
+            <p>Sign in to manage your applications, follow challenge updates and keep your team aligned through the
+                pilot.</p>
+        </section>
+        <form class="login-form" id="login-form">
+            <h2>Sign in</h2><label for="email">Work email</label><input id="email" name="email" type="email"
+                placeholder="you@company.com" required><label for="password">Password</label><input id="password"
+                name="password" type="password" placeholder="Enter your password" required>
+            <div class="form-row"><label><input type="checkbox"> Remember me</label><a
+                    href="mailto:support@startupconnect.in">Forgot password?</a></div><button class="button"
+                type="submit">Continue</button>
+            <div class="form-message" role="status"></div>
+        </form>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-top">
+                <div><a class="brand" href="/"><span class="brand-mark">↯</span>Startup Connect India</a>
+                    <p>The trusted bridge between public challenges and startup capability.</p>
+                </div>
+                <div class="footer-links">
+                    <div>
+                        <h4>Platform</h4><a href="/challenges">Open challenges</a><a href="/directory">Startup
+                            directory</a><a href="/resources">Templates & resources</a>
+                    </div>
+                    <div>
+                        <h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a
+                            href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+        </div>
+    </footer>
+    <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' }; document.querySelector('#login-form').onsubmit = async e => { e.preventDefault(); const r = await fetch('/api/login', { method: 'POST' }); const d = await r.json(); document.querySelector('.form-message').textContent = d.message };</script>
+{% endblock %}
