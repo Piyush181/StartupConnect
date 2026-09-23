@@ -503,6 +503,12 @@ input {
     background: #e9eff0;
 }
 
+.registration-progress { display: flex; gap: 10px; margin-bottom: 32px; color: var(--muted); font: 12px 'DM Mono', monospace; text-transform: uppercase; }
+.progress-step { padding: 10px 12px; border: 1px solid #c8d4d7; }
+.progress-step.active { border-color: var(--teal); color: var(--teal); background: #e8f5f3; }
+.registration-step[hidden] { display: none; }
+.registration-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
 .form-section {
     margin: 0 0 38px;
     padding: 0 0 28px;
@@ -566,6 +572,7 @@ input {
     .choice-card h2 { margin-top: 52px; }
     .registration-wrap { padding: 55px 0 80px; }
     .registration-form { padding: 24px; }
+    .registration-progress { display: grid; }
     .form-grid { grid-template-columns: 1fr; }
     .form-field.full { grid-column: auto; }
 }

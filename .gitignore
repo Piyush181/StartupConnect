@@ -1,10 +1,13 @@
 # VS Code workspace settings
 .vscode/
 
+<<<<<<< HEAD
 # Local test files
 /tests/*
 !/tests/test_application_flow.py
 
+=======
+>>>>>>> e6d063f (Updates register to store data in a mysql database and gitignore files)
 # Python bytecode and caches
 __pycache__/
 *.py[cod]

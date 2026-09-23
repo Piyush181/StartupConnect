@@ -9,6 +9,8 @@
     </section>
 
     <form class="registration-form" id="registration-form">
+        <div class="registration-progress" aria-label="Registration progress"><span class="progress-step active">1. Company profile</span><span class="progress-step">2. Verification login</span></div>
+        <div class="registration-step" data-step="1">
         <fieldset class="form-section">
             <legend>Business identity</legend>
             <div class="form-grid">
@@ -61,7 +63,21 @@
             </div>
         </fieldset>
 
-        <button class="button" type="submit">Submit startup profile</button>
+        <button class="button next-step" type="button">Continue to verification</button>
+        </div>
+
+        <div class="registration-step" data-step="2" hidden>
+            <fieldset class="form-section">
+                <legend>Create your verification login</legend>
+                <p class="form-note">Choose a unique business ID and a strong password. You will use these credentials to verify and manage your startup profile.</p>
+                <div class="form-grid">
+                    <div class="form-field full"><label for="business-id">Unique business ID</label><input id="business-id" name="business_id" autocomplete="username" pattern="[A-Za-z0-9._\x2d]{4,80}" placeholder="e.g. fieldsense-mh" required></div>
+                    <div class="form-field"><label for="registration-password">Password</label><input id="registration-password" name="password" type="password" autocomplete="new-password" minlength="12" required></div>
+                    <div class="form-field"><label for="password-confirmation">Confirm password</label><input id="password-confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="12" required></div>
+                </div>
+            </fieldset>
+            <div class="registration-actions"><button class="button outline previous-step" type="button">Back to company profile</button><button class="button" type="submit">Submit startup profile</button></div>
+        </div>
         <div class="form-message" role="status"></div>
     </form>
 </main>
@@ -79,6 +95,22 @@
 </footer>
 <script>
     document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };
-    document.querySelector('#registration-form').onsubmit = async event => { event.preventDefault(); const response = await fetch('/api/register', { method: 'POST' }); const result = await response.json(); document.querySelector('.form-message').textContent = result.message; event.target.reset(); };
+    const registrationForm = document.querySelector('#registration-form');
+    const steps = [...document.querySelectorAll('.registration-step')];
+    const progressSteps = [...document.querySelectorAll('.progress-step')];
+    const message = document.querySelector('.form-message');
+    const showStep = number => { steps.forEach(step => { step.hidden = step.dataset.step !== String(number); }); progressSteps.forEach((step, index) => step.classList.toggle('active', index < number)); window.scrollTo({ top: registrationForm.offsetTop - 24, behavior: 'smooth' }); };
+    document.querySelector('.next-step').onclick = () => { const invalid = [...steps[0].querySelectorAll(':invalid')]; if (invalid.length) { invalid[0].reportValidity(); return; } showStep(2); };
+    document.querySelector('.previous-step').onclick = () => showStep(1);
+    registrationForm.onsubmit = async event => {
+        event.preventDefault();
+        const password = document.querySelector('#registration-password');
+        const confirmation = document.querySelector('#password-confirmation');
+        if (password.value !== confirmation.value) { confirmation.setCustomValidity('Passwords must match.'); confirmation.reportValidity(); return; }
+        confirmation.setCustomValidity('');
+        const response = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(registrationForm))) });
+        const result = await response.json(); message.textContent = result.message;
+        if (result.ok) { registrationForm.reset(); showStep(1); }
+    };
 </script>
 {% endblock %}
