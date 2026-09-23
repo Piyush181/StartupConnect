@@ -1,0 +1,74 @@
+{% extends "base.htm" %}
+
+{% block content %}
+    <main>
+        <section class="container page-hero">
+            <div class="kicker">The people behind the possibility</div>
+            <h1>Startups building for public good.</h1>
+            <p>Meet the founders and teams turning Maharashtra's hardest challenges into practical, measurable
+                solutions.</p>
+        </section>
+        <section class="container page-content">
+            <div class="section-label">186 startups in the network · 42 departments served</div>
+            <div class="directory-grid">
+                <article class="startup">
+                    <div class="startup-top"><span>01 / Agri-tech</span><span>Mumbai</span></div>
+                    <h3>FieldSense</h3>
+                    <p>Predictive crop intelligence that gives smallholder farmers clearer decisions, from sowing to
+                        harvest.</p><span class="tag">Climate & agriculture</span>
+                </article>
+                <article class="startup">
+                    <div class="startup-top"><span>02 / Health-tech</span><span>Pune</span></div>
+                    <h3>CareGrid</h3>
+                    <p>Low-bandwidth screening tools that help frontline teams find risk sooner and refer patients with
+                        confidence.</p><span class="tag">Public health</span>
+                </article>
+                <article class="startup">
+                    <div class="startup-top"><span>03 / Mobility</span><span>Nagpur</span></div>
+                    <h3>Raahi Labs</h3>
+                    <p>Safer last-mile transport systems designed around the everyday journeys of tier-2 cities.</p>
+                    <span class="tag">Urban mobility</span>
+                </article>
+                <article class="startup">
+                    <div class="startup-top"><span>04 / Gov-tech</span><span>Nashik</span></div>
+                    <h3>CivicSignal</h3>
+                    <p>Simple evidence and feedback loops for departments managing complex public services.</p><span
+                        class="tag">Civic infrastructure</span>
+                </article>
+                <article class="startup">
+                    <div class="startup-top"><span>05 / Water</span><span>Kolhapur</span></div>
+                    <h3>JalSetu</h3>
+                    <p>Affordable monitoring for community water systems, with alerts that reach operators in real time.
+                    </p><span class="tag">Water resilience</span>
+                </article>
+                <article class="startup">
+                    <div class="startup-top"><span>06 / Energy</span><span>Thane</span></div>
+                    <h3>VoltVillage</h3>
+                    <p>Distributed clean energy management for public facilities and neighborhood-scale resilience.</p>
+                    <span class="tag">Clean energy</span>
+                </article>
+            </div>
+        </section>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-top">
+                <div><a class="brand" href="/"><span class="brand-mark">↯</span>Startup Connect India</a>
+                    <p>The trusted bridge between public challenges and startup capability.</p>
+                </div>
+                <div class="footer-links">
+                    <div>
+                        <h4>Platform</h4><a href="/challenges">Open challenges</a><a href="/directory">Startup
+                            directory</a><a href="/resources">Templates & resources</a>
+                    </div>
+                    <div>
+                        <h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a
+                            href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+        </div>
+    </footer>
+    <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.htm" %}
+
+{% block content %}
+    <main>
+        <section class="container page-hero">
+            <div class="kicker">A clear path from need to scale</div>
+            <h1>One mechanism. Better public outcomes.</h1>
+            <p>We make innovation procurement easier to understand, easier to trust and easier to move forward.</p>
+        </section>
+        <section class="container page-content">
+            <div class="section-label">The nine-stage pathway</div>
+            <div class="timeline">
+                <article class="phase"><span class="phase-number">01 / DEFINE</span>
+                    <h3>Departments frame the need.</h3>
+                    <p>Clear problem statements describe the outcome, context and constraints without prescribing a
+                        solution.</p>
+                </article>
+                <article class="phase"><span class="phase-number">02 / TEST</span>
+                    <h3>Startups prove the fit.</h3>
+                    <p>Teams apply against a transparent brief and show the evidence behind their approach.</p>
+                </article>
+                <article class="phase"><span class="phase-number">03 / SCALE</span>
+                    <h3>Everyone learns from the pilot.</h3>
+                    <p>Milestones and measurement turn a promising experiment into a procurement-ready pathway.</p>
+                </article>
+            </div>
+            <div class="full-steps">
+                <article class="full-step"><b>01</b>
+                    <h3>Discover</h3>
+                    <p>Browse live, outcome-led challenges from departments actively seeking new solutions.</p>
+                </article>
+                <article class="full-step"><b>02</b>
+                    <h3>Apply</h3>
+                    <p>Share your approach, team, evidence and delivery plan in one structured application.</p>
+                </article>
+                <article class="full-step"><b>03</b>
+                    <h3>Screen</h3>
+                    <p>Eligibility and readiness checks ensure every proposal reaches the right review.</p>
+                </article>
+                <article class="full-step"><b>04</b>
+                    <h3>Evaluate</h3>
+                    <p>Weighted scorecards and independent validation keep decisions consistent and fair.</p>
+                </article>
+                <article class="full-step"><b>05</b>
+                    <h3>Pilot</h3>
+                    <p>Milestone contracts give teams a focused space to test their solution in context.</p>
+                </article>
+                <article class="full-step"><b>06–09</b>
+                    <h3>Measure, pay, validate, scale</h3>
+                    <p>Performance evidence unlocks payment, shared learning and the next stage of adoption.</p>
+                </article>
+            </div>
+        </section>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-top">
+                <div><a class="brand" href="/"><span class="brand-mark">↯</span>Startup Connect India</a>
+                    <p>The trusted bridge between public challenges and startup capability.</p>
+                </div>
+                <div class="footer-links">
+                    <div>
+                        <h4>Platform</h4><a href="/challenges">Open challenges</a><a href="/directory">Startup
+                            directory</a><a href="/resources">Templates & resources</a>
+                    </div>
+                    <div>
+                        <h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a
+                            href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+        </div>
+    </footer>
+    <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };</script>
+{% endblock %}

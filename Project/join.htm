@@ -1,0 +1,40 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main>
+    <section class="container page-hero">
+        <div class="kicker">Choose your path</div>
+        <h1>Join the network on your terms.</h1>
+        <p>Startup Connect brings public challenges and capable teams together. Choose the account that matches your role.</p>
+    </section>
+    <section class="container page-content">
+        <div class="choice-grid">
+            <article class="choice-card">
+                <div class="choice-number">01 / STARTUP OR BUSINESS</div>
+                <h2>Register your company</h2>
+                <p>Share your company profile, capabilities and contact details to discover relevant government challenges.</p>
+                <a class="button" href="/register">Register as a startup</a>
+            </article>
+            <article class="choice-card">
+                <div class="choice-number">02 / GOVERNMENT MINISTRY</div>
+                <h2>Access your workspace</h2>
+                <p>Sign in as a government ministry or department to frame challenges, review applications and track pilots.</p>
+                <a class="button outline" href="/login">Login as a ministry</a>
+            </article>
+        </div>
+    </section>
+</main>
+<footer class="footer">
+    <div class="container">
+        <div class="footer-top">
+            <div><a class="brand" href="/"><span class="brand-mark">↯</span>Startup Connect India</a><p>The trusted bridge between public challenges and startup capability.</p></div>
+            <div class="footer-links">
+                <div><h4>Platform</h4><a href="/challenges">Open challenges</a><a href="/directory">Startup directory</a><a href="/resources">Templates & resources</a></div>
+                <div><h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a></div>
+            </div>
+        </div>
+        <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+    </div>
+</footer>
+<script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };</script>
+{% endblock %}

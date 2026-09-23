@@ -1,0 +1,737 @@
+{% extends "base.htm" %}
+
+{% block head_extra %}
+    <style>
+        :root {
+            --ink: #102e46;
+            --teal: #078b88;
+            --orange: #ff7518;
+            --paper: #f6f8fa;
+            --line: #dbe2e6;
+            --muted: #60717d;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            background: var(--paper);
+            font-family: Manrope, sans-serif;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .container {
+            width: min(1240px, calc(100% - 72px));
+            margin: 0 auto;
+        }
+
+        .nav {
+            height: 94px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -.04em;
+            white-space: nowrap;
+        }
+
+        .brand-mark {
+            width: 36px;
+            height: 36px;
+            display: grid;
+            place-items: center;
+            border-radius: 9px;
+            color: white;
+            background: var(--orange);
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 30px;
+            color: #536575;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .nav-links a:hover {
+            color: var(--teal);
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 26px;
+            font-size: 14px;
+            font-weight: 800;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 4px;
+            padding: 14px 20px;
+            background: var(--ink);
+            color: white;
+            font: inherit;
+            cursor: pointer;
+            transition: transform .2s, background .2s;
+        }
+
+        .button:hover {
+            transform: translateY(-2px);
+            background: var(--teal);
+        }
+
+        .button.outline {
+            background: transparent;
+            border: 1px solid var(--ink);
+            color: var(--ink);
+        }
+
+        .button.outline:hover {
+            background: var(--ink);
+            color: white;
+        }
+
+        .hero {
+            min-height: 635px;
+            padding: 92px 0 74px;
+            display: grid;
+            grid-template-columns: minmax(0, .95fr) minmax(380px, 1.1fr);
+            gap: 64px;
+            align-items: center;
+        }
+
+        .eyebrow,
+        .section-kicker {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #237c7e;
+            font: 500 13px 'DM Mono', monospace;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+        }
+
+        .eyebrow::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--orange);
+        }
+
+        h1 {
+            margin: 36px 0 28px;
+            max-width: 640px;
+            font: 500 clamp(3.45rem, 6.2vw, 6.15rem)/.94 Newsreader, serif;
+            letter-spacing: -.065em;
+        }
+
+        h1 .accent {
+            color: var(--teal);
+        }
+
+        .hero-copy {
+            max-width: 490px;
+            color: var(--muted);
+            font-size: 16px;
+            line-height: 1.7;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 32px;
+        }
+
+        .hero-art {
+            position: relative;
+            min-height: 490px;
+            overflow: hidden;
+            border-radius: 4px;
+            background: #b6c3c9;
+        }
+
+        .hero-art img {
+            width: 100%;
+            height: 100%;
+            min-height: 490px;
+            display: block;
+            object-fit: cover;
+        }
+
+        .pulse {
+            position: absolute;
+            right: 22px;
+            bottom: 22px;
+            width: 250px;
+            padding: 17px 18px;
+            color: white;
+            background: rgba(16, 46, 70, .93);
+        }
+
+        .pulse-label {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            color: #9bd8d3;
+            font: 11px 'DM Mono', monospace;
+            letter-spacing: .04em;
+        }
+
+        .pulse-label::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--orange);
+            box-shadow: 0 0 0 4px rgba(255, 117, 24, .17);
+        }
+
+        .pulse strong {
+            display: block;
+            margin-top: 9px;
+            font-size: 23px;
+        }
+
+        .pulse small {
+            color: #cbd6dc;
+        }
+
+        .stats {
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            padding: 26px 0;
+        }
+
+        .stat {
+            padding-left: 32px;
+            border-left: 1px solid var(--line);
+        }
+
+        .stat:first-child {
+            padding-left: 0;
+            border-left: 0;
+        }
+
+        .stat strong {
+            font: 600 42px Newsreader, serif;
+        }
+
+        .stat span {
+            display: block;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+
+        section {
+            padding: 110px 0;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        h2 {
+            max-width: 640px;
+            margin: 18px 0 0;
+            font: 500 clamp(2.8rem, 5vw, 5rem)/.98 Newsreader, serif;
+            letter-spacing: -.06em;
+        }
+
+        .section-intro {
+            max-width: 380px;
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.65;
+            font-size: 15px;
+        }
+
+        .mechanism {
+            background: var(--ink);
+            color: white;
+        }
+
+        .mechanism .section-kicker {
+            color: #8ed2cc;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            border-top: 1px solid rgba(255, 255, 255, .24);
+            border-bottom: 1px solid rgba(255, 255, 255, .24);
+            margin-top: 52px;
+        }
+
+        .step {
+            min-height: 92px;
+            padding: 19px 12px 14px;
+            border-right: 1px solid rgba(255, 255, 255, .17);
+            font-size: 12px;
+            color: #a7b8c1;
+        }
+
+        .step:last-child {
+            border: 0;
+        }
+
+        .step b {
+            display: block;
+            margin-bottom: 17px;
+            color: var(--orange);
+            font: 11px 'DM Mono', monospace;
+        }
+
+        .step.active {
+            color: white;
+            background: rgba(255, 255, 255, .07);
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--line);
+        }
+
+        .feature {
+            background: var(--paper);
+            min-height: 260px;
+            padding: 28px;
+        }
+
+        .feature-number {
+            color: var(--orange);
+            font: 12px 'DM Mono', monospace;
+        }
+
+        .feature h3 {
+            margin: 50px 0 13px;
+            font: 600 26px Newsreader, serif;
+        }
+
+        .feature p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .challenges {
+            background: #edf1f2;
+        }
+
+        .challenge-list {
+            border-top: 1px solid var(--ink);
+        }
+
+        .challenge {
+            display: grid;
+            grid-template-columns: 1.15fr 1fr .75fr auto;
+            align-items: center;
+            gap: 22px;
+            padding: 24px 0;
+            border-bottom: 1px solid #cfd8dc;
+            transition: padding .2s;
+        }
+
+        .challenge:hover {
+            padding-left: 10px;
+            padding-right: 10px;
+            background: rgba(255, 255, 255, .5);
+        }
+
+        .challenge-type {
+            color: var(--teal);
+            font: 11px 'DM Mono', monospace;
+            text-transform: uppercase;
+        }
+
+        .challenge h3 {
+            margin: 7px 0 0;
+            font-size: 18px;
+            letter-spacing: -.03em;
+        }
+
+        .challenge p,
+        .challenge .meta {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .challenge .meta strong {
+            display: block;
+            color: var(--ink);
+            font-size: 14px;
+        }
+
+        .arrow {
+            font-size: 24px;
+            color: var(--teal);
+        }
+
+        .cta {
+            padding: 95px 0;
+            background: var(--orange);
+            color: var(--ink);
+        }
+
+        .cta-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 30px;
+        }
+
+        .cta h2 {
+            max-width: 680px;
+        }
+
+        .cta p {
+            max-width: 350px;
+            line-height: 1.6;
+        }
+
+        footer {
+            padding: 46px 0 32px;
+            background: #e2e9eb;
+        }
+
+        .footer-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 40px;
+            padding-bottom: 56px;
+        }
+
+        .footer-top p {
+            max-width: 280px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 70px;
+        }
+
+        .footer-links h4 {
+            margin: 0 0 17px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .footer-links a {
+            display: block;
+            margin: 9px 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .footer-bottom {
+            padding-top: 18px;
+            border-top: 1px solid #c8d2d5;
+            color: var(--muted);
+            font: 11px 'DM Mono', monospace;
+        }
+
+        .mobile-menu {
+            display: none;
+        }
+
+        @media (max-width: 820px) {
+            .container {
+                width: min(100% - 36px, 620px);
+            }
+
+            .nav {
+                height: 76px;
+            }
+
+            .nav-links,
+            .nav-actions>a {
+                display: none;
+            }
+
+            .nav-actions {
+                margin-left: auto;
+            }
+
+            .mobile-menu {
+                display: block;
+                padding: 8px;
+                background: transparent;
+                border: 0;
+                color: var(--ink);
+                font-size: 22px;
+                cursor: pointer;
+            }
+
+            .hero {
+                display: block;
+                padding: 66px 0 54px;
+            }
+
+            h1 {
+                margin-top: 28px;
+                font-size: clamp(3.4rem, 14vw, 5rem);
+            }
+
+            .hero-art {
+                margin-top: 44px;
+                min-height: 370px;
+            }
+
+            .hero-art img {
+                min-height: 370px;
+            }
+
+            .stats {
+                margin-top: 0;
+            }
+
+            section {
+                padding: 75px 0;
+            }
+
+            .section-head,
+            .cta-inner,
+            .footer-top {
+                display: block;
+            }
+
+            .section-intro {
+                margin-top: 24px;
+            }
+
+            .steps {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .step {
+                border-bottom: 1px solid rgba(255, 255, 255, .17);
+            }
+
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .feature {
+                min-height: 215px;
+            }
+
+            .feature h3 {
+                margin-top: 35px;
+            }
+
+            .challenge {
+                grid-template-columns: 1fr auto;
+                gap: 9px 18px;
+            }
+
+            .challenge p,
+            .challenge .meta {
+                grid-column: 1;
+            }
+
+            .arrow {
+                grid-column: 2;
+                grid-row: 1 / span 3;
+            }
+
+            .cta p {
+                margin: 24px 0;
+            }
+
+            .footer-links {
+                margin-top: 40px;
+                gap: 34px;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+    <main id="top">
+        <div class="container hero">
+            <div>
+                <div class="eyebrow">Maharashtra innovation procurement network</div>
+                <h1>A faster, fairer bridge between <span class="accent">government challenges</span> and startup
+                    innovation.</h1>
+                <p class="hero-copy">Turn public needs into measurable outcomes, from the first problem statement to a
+                    pilot that is ready to scale.</p>
+                <div class="hero-actions"><a class="button" href="#challenges">Explore open challenges</a><a
+                        class="button outline" href="#mechanism">See how it works</a></div>
+            </div>
+            <div class="hero-art"><img
+                    src="https://images.unsplash.com/photo-1774069129040-05a274355383?auto=format&fit=crop&w=1200&q=85"
+                    alt="Modern city infrastructure at dusk">
+                <div class="pulse">
+                    <div class="pulse-label">Live network pulse</div><strong>18 active pilots</strong><small>Across
+                        Maharashtra · updated today</small>
+                </div>
+            </div>
+        </div>
+        <div class="container stats">
+            <div class="stat"><strong>42</strong><span>Departments</span></div>
+            <div class="stat"><strong>186</strong><span>Startups</span></div>
+            <div class="stat"><strong>27</strong><span>Pilots scaled</span></div>
+        </div>
+        <section id="mechanism" class="mechanism">
+            <div class="container">
+                <div class="section-head">
+                    <div>
+                        <div class="section-kicker">The mechanism</div>
+                        <h2>Innovation procurement, made legible.</h2>
+                    </div>
+                    <p class="section-intro">One transparent workflow for departments, founders and independent
+                        evaluators, with the right guardrails at every stage.</p>
+                </div>
+                <div class="steps">
+                    <div class="step active"><b>01</b>Discover</div>
+                    <div class="step"><b>02</b>Apply</div>
+                    <div class="step"><b>03</b>Screen</div>
+                    <div class="step"><b>04</b>Evaluate</div>
+                    <div class="step"><b>05</b>Pilot</div>
+                    <div class="step"><b>06</b>Measure</div>
+                    <div class="step"><b>07</b>Pay</div>
+                    <div class="step"><b>08</b>Validate</div>
+                    <div class="step"><b>09</b>Scale</div>
+                </div>
+                <div id="directory" class="feature-grid">
+                    <article class="feature"><span class="feature-number">01 / FIT</span>
+                        <h3>Discover the right fit</h3>
+                        <p>Browse outcome-led problem statements from departments actively seeking new solutions.</p>
+                    </article>
+                    <article class="feature"><span class="feature-number">02 / TRUST</span>
+                        <h3>Evaluate with confidence</h3>
+                        <p>Structured eligibility, weighted scorecards and independent validation keep decisions fair.
+                        </p>
+                    </article>
+                    <article class="feature"><span class="feature-number">03 / IMPACT</span>
+                        <h3>Scale what works</h3>
+                        <p>Milestone contracts, performance evidence and procurement-ready pathways turn pilots into
+                            impact.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+        <section id="challenges" class="challenges">
+            <div class="container">
+                <div class="section-head">
+                    <div>
+                        <div class="section-kicker">Now accepting applications</div>
+                        <h2>Challenges that need a new answer.</h2>
+                    </div><a class="button outline" href="#challenges">View all challenges</a>
+                </div>
+                <div class="challenge-list">
+                    <article class="challenge">
+                        <div>
+                            <div class="challenge-type">Open · PS MH-041</div>
+                            <h3>Predictive crop advisory for smallholder farms</h3>
+                        </div>
+                        <p>Department of Agriculture<br>Agri-tech</p>
+                        <div class="meta"><strong>₹35–50 lakh</strong>Apply by 18 Aug 2026</div><span
+                            class="arrow">↗</span>
+                    </article>
+                    <article class="challenge">
+                        <div>
+                            <div class="challenge-type">Open · PS MH-038</div>
+                            <h3>Low-cost remote screening for diabetic retinopathy</h3>
+                        </div>
+                        <p>Public Health Department<br>Health-tech</p>
+                        <div class="meta"><strong>₹50–75 lakh</strong>Apply by 02 Sep 2026</div><span
+                            class="arrow">↗</span>
+                    </article>
+                    <article class="challenge">
+                        <div>
+                            <div class="challenge-type">Pilot intake · PS MH-034</div>
+                            <h3>Safer last-mile mobility for tier-2 cities</h3>
+                        </div>
+                        <p>Urban Development Department<br>Mobility</p>
+                        <div class="meta"><strong>₹25–40 lakh</strong>Apply by 26 Jul 2026</div><span
+                            class="arrow">↗</span>
+                    </article>
+                </div>
+            </div>
+        </section>
+        <section id="join" class="cta">
+            <div class="container cta-inner">
+                <div>
+                    <div class="section-kicker">Built for both sides of the bridge</div>
+                    <h2>Have a public problem worth solving?</h2>
+                </div>
+                <div>
+                    <p>Departments frame the need. Startups bring the possibility.</p><a class="button"
+                        href="mailto:hello@startupconnect.in">Join Startup Connect</a>
+                </div>
+            </div>
+        </section>
+    </main>
+    <footer id="resources">
+        <div class="container">
+            <div class="footer-top">
+                <div><a class="brand" href="#top"><span class="brand-mark">↯</span>Startup Connect India</a>
+                    <p>The trusted bridge between public challenges and startup capability.</p>
+                </div>
+                <div class="footer-links">
+                    <div>
+                        <h4>Platform</h4><a href="#challenges">Open challenges</a><a href="/directory">Startup
+                            directory</a><a href="/resources">Templates & resources</a>
+                    </div>
+                    <div>
+                        <h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a
+                            href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+        </div>
+    </footer>
+    <script>
+        const menuButton = document.querySelector('.mobile-menu');
+        const nav = document.querySelector('.nav-links');
+        menuButton.addEventListener('click', () => { nav.classList.toggle('is-open'); nav.style.display = nav.classList.contains('is-open') ? 'grid' : ''; });
+        document.querySelectorAll('.step').forEach(step => step.addEventListener('click', () => { document.querySelectorAll('.step').forEach(item => item.classList.remove('active')); step.classList.add('active'); }));
+    </script>
+{% endblock %}

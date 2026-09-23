@@ -1,0 +1,84 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container registration-wrap">
+    <section class="registration-intro">
+        <div class="kicker">Startup and business registration</div>
+        <h1>Tell us what you are building.</h1>
+        <p>This profile helps government teams understand your capability and keeps the right person in touch as opportunities move forward.</p>
+    </section>
+
+    <form class="registration-form" id="registration-form">
+        <fieldset class="form-section">
+            <legend>Business identity</legend>
+            <div class="form-grid">
+                <div class="form-field"><label for="business-name">Name of business</label><input id="business-name" name="business_name" required></div>
+                <div class="form-field"><label for="business-type">Type</label><select id="business-type" name="business_type" required><option value="">Select type</option><option>Public Limited</option><option>Private Limited</option><option>One Person Company (OPC)</option><option>Section 8 (Non-Profit) Company</option></select></div>
+                <div class="form-field"><label for="cin">CIN number</label><input id="cin" name="cin" placeholder="e.g. U12345MH2020PTC000000" required></div>
+                <div class="form-field"><label for="incorporation">Date of incorporation</label><input id="incorporation" name="incorporation_date" type="date" required></div>
+                <div class="form-field full"><label for="ownership">Ownership details</label><textarea id="ownership" name="ownership_details" placeholder="Founders, promoter or ownership structure" required></textarea></div>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>Capability and stage</legend>
+            <div class="form-grid">
+                <div class="form-field"><label for="sector">Sector</label><input id="sector" name="sector" placeholder="e.g. Health-tech, mobility" required></div>
+                <div class="form-field"><label for="domain">Domain and products/services</label><input id="domain" name="domain" placeholder="What do you provide?" required></div>
+                <div class="form-field"><label for="employees">Employee count</label><input id="employees" name="employee_count" type="number" min="1" required></div>
+                <div class="form-field"><label for="stage">Current stage</label><select id="stage" name="current_stage" required><option value="">Select stage</option><option>Idea / pre-incorporation</option><option>Early revenue</option><option>Growth</option><option>Scale-up</option><option>Established business</option></select></div>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>Company address and contact</legend>
+            <div class="form-grid">
+                <div class="form-field full"><label for="address">Company address</label><textarea id="address" name="company_address" required></textarea></div>
+                <div class="form-field"><label for="company-email">Company email</label><input id="company-email" name="company_email" type="email" required></div>
+                <div class="form-field"><label for="company-phone">Company phone</label><input id="company-phone" name="company_phone" type="tel" required></div>
+                <div class="form-field"><label for="website">Website</label><input id="website" name="website" type="url" placeholder="https://"></div>
+                <div class="form-field"><label for="pincode">PIN code</label><input id="pincode" name="pincode" inputmode="numeric" required></div>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>Contact representative</legend>
+            <p class="form-note">Please provide one person who can coordinate with government departments throughout applications and pilots.</p>
+            <div class="form-grid">
+                <div class="form-field"><label for="representative-name">Full name</label><input id="representative-name" name="representative_name" required></div>
+                <div class="form-field"><label for="representative-title">Job title</label><input id="representative-title" name="representative_title" required></div>
+                <div class="form-field"><label for="representative-email">Email</label><input id="representative-email" name="representative_email" type="email" required></div>
+                <div class="form-field"><label for="representative-phone">Phone</label><input id="representative-phone" name="representative_phone" type="tel" required></div>
+            </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+            <legend>GSTIN details</legend>
+            <div class="form-grid">
+                <div class="form-field"><label for="gstin">GSTIN</label><input id="gstin" name="gstin" placeholder="15-character GSTIN" required></div>
+                <div class="form-field"><label for="gst-state">GST registration state</label><input id="gst-state" name="gst_state" required></div>
+                <div class="form-field full"><label for="gst-status">GST details or notes</label><textarea id="gst-status" name="gst_details" placeholder="Registration status or any relevant details"></textarea></div>
+            </div>
+        </fieldset>
+
+        <button class="button" type="submit">Submit startup profile</button>
+        <div class="form-message" role="status"></div>
+    </form>
+</main>
+<footer class="footer">
+    <div class="container">
+        <div class="footer-top">
+            <div><a class="brand" href="/"><span class="brand-mark">↯</span>Startup Connect India</a><p>The trusted bridge between public challenges and startup capability.</p></div>
+            <div class="footer-links">
+                <div><h4>Platform</h4><a href="/challenges">Open challenges</a><a href="/directory">Startup directory</a><a href="/resources">Templates & resources</a></div>
+                <div><h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a></div>
+            </div>
+        </div>
+        <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+    </div>
+</footer>
+<script>
+    document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };
+    document.querySelector('#registration-form').onsubmit = async event => { event.preventDefault(); const response = await fetch('/api/register', { method: 'POST' }); const result = await response.json(); document.querySelector('.form-message').textContent = result.message; event.target.reset(); };
+</script>
+{% endblock %}
