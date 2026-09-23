@@ -156,8 +156,8 @@ def save_startup_registration(data: Mapping[str, str]) -> None:
                 domain, employee_count, current_stage, company_address,
                 company_email, company_phone, website, pincode,
                 representative_encrypted, gstin_encrypted, gst_state, gst_details
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            values,
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                values,
         )
         connection.commit()
     finally:
@@ -219,6 +219,45 @@ def authenticate_ministry(ministry_id: str, auth_code: str) -> bool:
             if stored_id == ministry_id.strip() and stored_code == auth_code:
                 return True
         return False
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def get_startup_profile(business_id: str) -> dict[str, Any] | None:
+    """Fetch the non-sensitive company profile for the authenticated startup."""
+    cipher = _cipher()
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(
+            """SELECT business_id_encrypted, business_name, business_type,
+                      ownership_details, incorporation_date, sector, domain,
+                      employee_count, current_stage, company_address,
+                      company_email, company_phone, website, pincode, gst_state
+               FROM startup_registrations WHERE business_id_hash = %s""",
+            (_lookup_hash(business_id.strip()),),
+        )
+        row = cast(tuple[Any, ...] | None, cursor.fetchone())
+        if not row:
+            return None
+        return {
+            "business_id": cipher.decrypt(row[0].encode()).decode(),
+            "business_name": row[1],
+            "business_type": row[2],
+            "ownership_details": row[3],
+            "incorporation_date": str(row[4]),
+            "sector": row[5],
+            "domain": row[6],
+            "employee_count": row[7],
+            "current_stage": row[8],
+            "company_address": row[9],
+            "company_email": row[10],
+            "company_phone": row[11],
+            "website": row[12],
+            "pincode": row[13],
+            "gst_state": row[14],
+        }
     finally:
         cursor.close()
         connection.close()

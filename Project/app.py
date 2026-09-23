@@ -12,6 +12,7 @@ from database import (
     DuplicateBusinessIdError,
     authenticate_ministry,
     authenticate_startup,
+    get_startup_profile,
     save_startup_registration,
 )
 
@@ -314,11 +315,6 @@ def page(page):
     return ("Page not found", 404)
 
 
-@app.get("/challenges")
-def challenges():
-    return redirect("/#challenges")
-
-
 @app.get("/government-dashboard")
 def government_dashboard():
     challenges = _serialize_challenges()
@@ -428,7 +424,8 @@ def login():
             valid = authenticate_ministry(data.get("ministry_id", ""), data.get("auth_code", ""))
             landing_page = "/ministry-portal"
         else:
-            valid = authenticate_startup(data.get("business_id", ""), data.get("gstin", ""), data.get("password", ""))
+            business_id = data.get("business_id", "")
+            valid = authenticate_startup(business_id, data.get("gstin", ""), data.get("password", ""))
             landing_page = "/startup-portal"
     except (DatabaseConfigurationError, ValueError) as error:
         return jsonify({"ok": False, "message": str(error)}), 503
@@ -437,6 +434,8 @@ def login():
     session.clear()
     session.permanent = True
     session["role"] = role
+    if role == "startup":
+        session["business_id"] = business_id
     return jsonify({"ok": True, "message": "Sign in successful.", "redirect": landing_page})
 
 
@@ -449,7 +448,21 @@ def logout():
 @app.get("/startup-portal")
 @session_required("startup")
 def startup_portal():
-    return render_template("startup-portal.htm")
+    profile = get_startup_profile(session["business_id"])
+    if not profile:
+        session.clear()
+        return redirect("/login")
+    return render_template("startup-portal.htm", profile=profile)
+
+
+@app.get("/company-profile")
+@session_required("startup")
+def company_profile():
+    profile = get_startup_profile(session["business_id"])
+    if not profile:
+        session.clear()
+        return redirect("/login")
+    return render_template("company-profile.htm", profile=profile)
 
 
 @app.get("/ministry-portal")
