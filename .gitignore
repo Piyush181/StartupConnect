@@ -1,6 +1,9 @@
 # VS Code workspace settings
 .vscode/
 
+# Local test files
+/tests/
+
 # Python bytecode and caches
 __pycache__/
 *.py[cod]

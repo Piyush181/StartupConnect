@@ -1,0 +1,65 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Government workspace</div>
+            <h1>My Challenges</h1>
+        </div>
+        <a class="button" href="/create-challenge">+ Create New Challenge</a>
+    </section>
+
+    <section class="stat-grid">
+        <article class="stat-card">
+            <span class="stat-label">Drafts</span>
+            <strong>{{ challenges | selectattr('status', 'equalto', 'Draft') | list | length }}</strong>
+        </article>
+        <article class="stat-card">
+            <span class="stat-label">Published</span>
+            <strong>{{ challenges | selectattr('status', 'equalto', 'Published') | list | length }}</strong>
+        </article>
+        <article class="stat-card">
+            <span class="stat-label">Active</span>
+            <strong>{{ challenges | selectattr('status', 'equalto', 'Published') | list | length }}</strong>
+        </article>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head">
+            <h2>Challenge portfolio</h2>
+        </div>
+
+        {% if challenges %}
+        <div class="challenge-list">
+            {% for challenge in challenges %}
+            <article class="challenge-card">
+                <div class="challenge-card-top">
+                    <div>
+                        <span class="challenge-id">{{ challenge.challengeId or 'GOV-00000' }}</span>
+                        <h3>{{ challenge.title or 'Untitled challenge' }}</h3>
+                    </div>
+                    <span class="status-badge {{ challenge.status | lower }}">{{ challenge.status or 'Draft' }}</span>
+                </div>
+                <div class="challenge-meta">
+                    <span>{{ challenge.category or 'General' }}</span>
+                    <span>{{ challenge.department or 'Department' }}</span>
+                    <span>{{ challenge.updatedAt[:10] if challenge.updatedAt else '—' }}</span>
+                </div>
+                <p>{{ challenge.problemStatement.description[:140] if challenge.problemStatement and challenge.problemStatement.description else 'Draft in progress. Continue editing to complete the challenge.' }}</p>
+                <div class="card-actions">
+                    <a href="/create-challenge?draft={{ challenge.challengeId or challenge.id }}">Continue Editing</a>
+                    <a href="/create-challenge?preview={{ challenge.challengeId or challenge.id }}">Preview</a>
+                    <a href="#">Duplicate</a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No challenges yet. Drafts and published challenges will appear here.</p>
+        </div>
+        {% endif %}
+    </section>
+</main>
+{% endblock %}
