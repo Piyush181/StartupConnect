@@ -102,6 +102,24 @@ TEMPLATE_LIBRARY = {
     },
 }
 
+SAMPLE_CONTRACTS = {
+    "PS-MH-038": {
+        "id": "PS-MH-038",
+        "title": "Low-cost remote screening for diabetic retinopathy",
+        "ministry": "Public Health Department, Government of Maharashtra",
+        "sub_ministry": "Non-Communicable Disease Control Cell",
+        "description": "The department is seeking an accessible screening solution that helps frontline health workers identify diabetic retinopathy risk earlier and route patients for timely clinical review.",
+        "solution_parameters": ["Works on low-bandwidth mobile devices", "Supports Marathi and English workflows", "Provides an auditable referral record", "Protects patient data in transit and at rest"],
+        "deadline": "30 November 2026",
+        "budget": "₹50–75 lakh",
+        "timeline": "16 weeks from contract award",
+        "milestones": ["Weeks 1–3 · Discovery and clinical workflow mapping", "Weeks 4–8 · Prototype and supervised validation", "Weeks 9–13 · District pilot across three facilities", "Weeks 14–16 · Impact report and scale recommendation"],
+        "application_deadline": "02 September 2026",
+        "applications": 18,
+        "type": "Health-tech",
+    }
+}
+
 
 def _now_iso():
     return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -463,6 +481,23 @@ def company_profile():
         session.clear()
         return redirect("/login")
     return render_template("company-profile.htm", profile=profile)
+
+
+@app.get("/contracts/<contract_id>")
+def contract_detail(contract_id):
+    contract = SAMPLE_CONTRACTS.get(contract_id.upper())
+    if not contract:
+        return ("Contract not found", 404)
+    return render_template("contract-detail.htm", contract=contract)
+
+
+@app.get("/contracts/<contract_id>/apply")
+@session_required("startup")
+def start_contract_application(contract_id):
+    contract = SAMPLE_CONTRACTS.get(contract_id.upper())
+    if not contract:
+        return ("Contract not found", 404)
+    return render_template("application-start.htm", contract=contract)
 
 
 @app.get("/ministry-portal")
