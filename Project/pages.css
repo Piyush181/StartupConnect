@@ -1129,9 +1129,239 @@ input {
     margin-bottom: 70px;
 }
 
+.public-challenges-shell {
+    padding-bottom: 70px;
+}
+
+.public-challenges-hero {
+    padding-bottom: 34px;
+}
+
+.public-view-note {
+    width: fit-content;
+    max-width: 760px;
+    margin-top: 24px;
+    padding: 12px 16px;
+    border-left: 3px solid var(--orange);
+    color: var(--muted);
+    background: #fff;
+    font-size: 13px;
+}
+
+.public-challenge-list {
+    display: grid;
+    gap: 24px;
+}
+
+.public-challenge-card {
+    border: 1px solid var(--line);
+    background: #fff;
+}
+
+.public-challenge-card-head,
+.public-government-strip,
+.public-challenge-summary {
+    display: grid;
+    gap: 24px;
+    padding: 26px 30px;
+}
+
+.public-challenge-card-head {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+}
+
+.public-challenge-card h2 {
+    margin: 8px 0 14px;
+    font-size: clamp(24px, 3vw, 38px);
+}
+
+.public-government-strip {
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: #f8fbfb;
+}
+
+.public-government-strip div {
+    display: grid;
+    gap: 6px;
+}
+
+.public-government-strip span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.public-challenge-summary {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.startup-engagement-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    padding: 20px 30px;
+    border-bottom: 1px solid var(--line);
+    background: #fff7ef;
+}
+
+.startup-engagement-strip div {
+    display: grid;
+    gap: 5px;
+}
+
+.startup-engagement-strip span {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.public-startup-list {
+    display: grid;
+    gap: 12px;
+    padding: 22px 30px;
+    border-bottom: 1px solid var(--line);
+}
+
+.public-startup-row {
+    display: grid;
+    grid-template-columns: 1.4fr repeat(4, 1fr);
+    gap: 14px;
+    align-items: center;
+    padding: 13px 0;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.public-startup-row strong {
+    color: var(--ink);
+    font-size: 14px;
+}
+
+.public-startup-note {
+    margin: -4px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.startup-progress-form {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.progress-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.startup-progress-form label {
+    display: grid;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.startup-progress-form input,
+.startup-progress-form select,
+.startup-progress-form textarea {
+    width: 100%;
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    color: var(--ink);
+    background: #fff;
+    font: inherit;
+}
+
+.dashboard-progress-list {
+    display: grid;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.public-challenge-summary p {
+    margin-bottom: 0;
+    line-height: 1.7;
+}
+
+.public-challenge-details {
+    border-top: 1px solid var(--line);
+}
+
+.public-challenge-details summary {
+    padding: 18px 30px;
+    color: var(--teal);
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.public-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    padding: 4px 30px 30px;
+}
+
+.public-detail-grid section {
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.public-detail-grid h3 {
+    margin: 0 0 10px;
+    font-size: 15px;
+}
+
+.public-detail-grid p {
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.public-detail-grid ul {
+    padding-left: 20px;
+    color: var(--muted);
+    line-height: 1.7;
+}
+
+.muted-item {
+    color: var(--muted);
+}
+
+.public-empty-state {
+    text-align: center;
+}
+
 @media (max-width: 760px) {
     .periodic-schedule,
-    .report-review-form {
+    .report-review-form,
+    .public-government-strip,
+    .public-challenge-summary,
+    .public-detail-grid,
+    .startup-engagement-strip,
+    .progress-form-grid,
+    .public-startup-row {
         grid-template-columns: 1fr;
+    }
+
+    .public-challenge-card-head,
+    .public-government-strip,
+    .public-challenge-summary,
+    .public-detail-grid,
+    .startup-engagement-strip,
+    .public-startup-list {
+        padding-left: 20px;
+        padding-right: 20px;
     }
 }
