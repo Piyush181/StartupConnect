@@ -18,7 +18,7 @@ MYSQL_CONFIG = {
     "host": os.getenv("STARTUP_CONNECT_DB_HOST", "localhost"),
     "port": int(os.getenv("STARTUP_CONNECT_DB_PORT", "3306")),
     "user": os.getenv("STARTUP_CONNECT_DB_USER", "root"),
-    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "apIEHewSeq8"),
+    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "Soham@14"),
     "database": "startupconnect",
 }
 
@@ -68,6 +68,24 @@ CREATE TABLE IF NOT EXISTS minfo (
     ministry_id_encrypted TEXT NOT NULL,
     auth_code_encrypted TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+CONTRACTS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS contracts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    challenge_id VARCHAR(100) NOT NULL UNIQUE,
+    title VARCHAR(500) NOT NULL,
+    government_body VARCHAR(255) NOT NULL,
+    department VARCHAR(255) NOT NULL,
+    state VARCHAR(100) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    created_by VARCHAR(255) NOT NULL,
+    challenge_data LONGTEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_contracts_status (status),
+    INDEX idx_contracts_created_by (created_by)
 )
 """
 
@@ -192,6 +210,7 @@ def _open_connection():
 def _prepare_auth_tables(connection, cursor, cipher: Fernet) -> None:
     cursor.execute(SCHEMA_SQL)
     cursor.execute(MINFO_SCHEMA_SQL)
+    cursor.execute(CONTRACTS_SCHEMA_SQL)
     cursor.execute("SELECT id FROM minfo LIMIT 1")
     if cursor.fetchone() is None:
         cursor.execute(
@@ -237,6 +256,42 @@ def authenticate_ministry(ministry_id: str, auth_code: str) -> bool:
             if stored_id == ministry_id.strip() and stored_code == auth_code:
                 return True
         return False
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def save_challenge_contract(challenge: Mapping[str, Any], created_by: str) -> None:
+    """Persist the complete challenge definition in the contracts table."""
+    challenge_id = str(challenge.get("challengeId", "")).strip()
+    if not challenge_id:
+        raise ValueError("Challenge ID is required before saving a contract.")
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(CONTRACTS_SCHEMA_SQL)
+        cursor.execute(
+            """INSERT INTO contracts (
+                challenge_id, title, government_body, department, state,
+                status, created_by, challenge_data
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                title = VALUES(title), government_body = VALUES(government_body),
+                department = VALUES(department), state = VALUES(state),
+                status = VALUES(status), created_by = VALUES(created_by),
+                challenge_data = VALUES(challenge_data)""",
+            (
+                challenge_id,
+                str(challenge.get("title", "Untitled challenge")) or "Untitled challenge",
+                str(challenge.get("ministry", "")),
+                str(challenge.get("department", "")),
+                str(challenge.get("state", "")),
+                str(challenge.get("status", "Draft")),
+                str(created_by or "ministry-user"),
+                json.dumps(dict(challenge), ensure_ascii=True),
+            ),
+        )
+        connection.commit()
     finally:
         cursor.close()
         connection.close()
