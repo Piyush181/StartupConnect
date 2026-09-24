@@ -117,4 +117,39 @@
     </div>
 </dialog>
 <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' }; document.querySelectorAll('[data-dialog]').forEach(button => button.onclick = () => document.querySelector('#' + button.dataset.dialog).showModal()); document.querySelectorAll('.dialog-close').forEach(button => button.onclick = () => button.closest('dialog').close()); document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close() }));</script>
+<section class="container challenge-panel startup-report-panel">
+	<div class="panel-head"><h2>Periodic report notifications</h2><span class="form-note">Phase 1: startup report submission</span></div>
+	<div id="startup-checks" class="report-review-list"><p class="form-note">Loading notifications...</p></div>
+</section>
+
+<script>
+	const checksContainer = document.getElementById('startup-checks');
+	async function loadPeriodicChecks() {
+		const response = await fetch('/api/periodic-checks');
+		const result = await response.json();
+		if (!response.ok || !result.checks.length) {
+			checksContainer.innerHTML = '<p class="form-note">No periodic report notifications yet.</p>';
+			return;
+		}
+		checksContainer.innerHTML = result.checks.map(item => {
+			const report = item.report;
+			const check = item.check;
+			if (report) {
+				return `<article class="report-review-card"><div><span class="challenge-id">${item.challengeId}</span><h3>${item.challengeTitle}</h3><p>${check.notification}</p></div><div class="report-meta"><span>Due ${check.dueDate}</span><span>${report.status}</span></div>${report.review ? `<p><strong>Government feedback:</strong> ${report.review.feedback || report.review.decision}</p>` : ''}</article>`;
+			}
+			return `<article class="report-review-card"><div><span class="challenge-id">${item.challengeId}</span><h3>${item.challengeTitle}</h3><p>${check.notification}</p><div class="report-meta"><span>${check.frequency}</span><span>Due ${check.dueDate}</span><span>${check.status}</span></div></div><form class="startup-report-form" data-check-id="${check.checkId}"><textarea name="summary" required placeholder="What was completed during this period?"></textarea><textarea name="progress" placeholder="Progress against milestones"></textarea><textarea name="metrics" placeholder="Metrics or results"></textarea><textarea name="blockers" placeholder="Blockers or support needed"></textarea><input name="evidence" placeholder="Evidence links or document references"><button class="button small" type="submit">Submit Report</button><span class="form-message"></span></form></article>`;
+		}).join('');
+		document.querySelectorAll('.startup-report-form').forEach(form => {
+			form.onsubmit = async event => {
+				event.preventDefault();
+				const status = form.querySelector('.form-message');
+				const response = await fetch(`/api/periodic-checks/${form.dataset.checkId}/reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+				const result = await response.json();
+				status.textContent = result.message;
+				if (response.ok) loadPeriodicChecks();
+			};
+		});
+	}
+	loadPeriodicChecks();
+</script>
 {% endblock %}
