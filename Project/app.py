@@ -13,6 +13,7 @@ from database import (
     authenticate_ministry,
     authenticate_startup,
     get_startup_profile,
+    list_startup_directory,
     save_contract_report,
     save_startup_registration,
 )
@@ -479,6 +480,18 @@ def page(page):
     return ("Page not found", 404)
 
 
+@app.get("/directory")
+def directory():
+    try:
+        startups = list_startup_directory()
+        database_error = None
+    except Exception:
+        app.logger.exception("Could not load startup directory from the database.")
+        startups = []
+        database_error = "Startup profiles could not be loaded from the database. Please check the database connection."
+    return render_template("directory.htm", startups=startups, database_error=database_error)
+
+
 @app.get("/challenges")
 def challenges():
     if session.get("role") == "ministry":
@@ -683,7 +696,6 @@ def update_startup_progress(challenge_id):
             store[bucket][challenge["id"]] = challenge
             break
     _write_store(store)
-    _persist_contract(challenge)
     return jsonify({"ok": True, "startupEngagement": engagement, "message": "Public startup progress updated."})
 
 

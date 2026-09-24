@@ -311,3 +311,43 @@ def get_startup_profile(business_id: str) -> dict[str, Any] | None:
     finally:
         cursor.close()
         connection.close()
+
+
+def list_startup_directory() -> list[dict[str, Any]]:
+    """Load public startup profile fields for the directory."""
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(SCHEMA_SQL)
+        cursor.execute(
+            """SELECT business_name, business_type, ownership_details,
+                      incorporation_date, sector, domain, employee_count,
+                      current_stage, company_address, company_email,
+                      company_phone, pincode, website, gst_state
+               FROM startup_registrations ORDER BY created_at DESC"""
+        )
+        directory = []
+        for row in cast(list[tuple[Any, ...]], cursor.fetchall()):
+            address = str(row[8] or "").strip()
+            city = address.split(",")[0].strip() if address else "Maharashtra"
+            directory.append({
+                "business_name": row[0],
+                "business_type": row[1],
+                "ownership_details": row[2],
+                "incorporation_date": str(row[3]),
+                "sector": row[4],
+                "domain": row[5],
+                "employee_count": row[6],
+                "current_stage": row[7],
+                "city": city,
+                "company_address": row[8],
+                "company_email": row[9],
+                "company_phone": row[10],
+                "pincode": row[11],
+                "website": row[12],
+                "gst_state": row[13],
+            })
+        return directory
+    finally:
+        cursor.close()
+        connection.close()
