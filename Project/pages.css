@@ -926,6 +926,32 @@ input {
     line-height: 1.7;
 }
 
+.toast-region {
+    position: fixed;
+    z-index: 1000;
+    top: 22px;
+    right: 22px;
+    display: grid;
+    gap: 10px;
+    width: min(360px, calc(100vw - 44px));
+    pointer-events: none;
+}
+
+.toast {
+    padding: 14px 16px;
+    border-left: 4px solid var(--teal);
+    background: var(--ink);
+    color: #fff;
+    box-shadow: 0 10px 26px rgba(16, 46, 70, .18);
+    font-size: 13px;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity .2s ease, transform .2s ease;
+}
+
+.toast.visible { opacity: 1; transform: translateY(0); }
+.toast.error { border-left-color: var(--orange); }
+
 @media (max-width: 820px) {
     .challenge-layout { grid-template-columns: 1fr; }
     .challenge-step-nav { position: static; }

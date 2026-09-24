@@ -1,174 +1,179 @@
 {
-  "drafts": {
-    "gov-2026-01001": {
-      "categoryList": [
-        "Other",
-        "Community Health",
-        "Rural Mobility"
-      ],
-      "challengeId": "GOV-2026-01001",
-      "challengeType": "Software",
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "ministry": "Maharashtra State Innovation Society",
-      "otherValues": {
-        "categoryList": [
-          "Community Health",
-          "Rural Mobility"
-        ],
-        "technicalConstraints": [
-          "Field inspections"
-        ]
-      },
-      "state": "Maharashtra",
-      "status": "Draft",
-      "title": "Community Mobility Challenge",
-      "updatedAt": "2026-09-24T19:34:18Z",
-      "createdBy": "admin",
-      "id": "gov-2026-01001"
-    },
-    "gov-2026-01000": {
-      "category": "AI / ML",
-      "challengeId": "GOV-2026-01000",
-      "challengeType": "Software",
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "ministry": "Maharashtra State Innovation Society",
-      "state": "Maharashtra",
-      "status": "Draft",
-      "title": "Waste Monitoring Challenge",
-      "updatedAt": "2026-09-24T19:34:18Z",
-      "createdBy": "admin",
-      "id": "gov-2026-01000"
-    },
-    "gov-2026-00003": {
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "ministry": "Maharashtra State Innovation Society",
-      "state": "Maharashtra",
-      "status": "Draft",
-      "title": "Fixed Identity Challenge",
-      "challengeId": "GOV-2026-00003",
-      "updatedAt": "2026-09-24T18:49:30Z",
-      "createdBy": "admin",
-      "id": "gov-2026-00003"
-    },
-    "gov-2026-00004": {
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "ministry": "Maharashtra State Innovation Society",
-      "state": "Maharashtra",
-      "status": "Draft",
-      "title": "Fixed Identity Challenge",
-      "challengeId": "GOV-2026-00004",
-      "updatedAt": "2026-09-24T19:27:14Z",
-      "createdBy": "admin",
-      "id": "gov-2026-00004"
-    },
-    "gov-2026-00005": {
-      "status": "Draft",
-      "title": "Contract Persistence Challenge",
-      "ministry": "Maharashtra State Innovation Society",
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "state": "Maharashtra",
-      "challengeId": "GOV-2026-00005",
-      "updatedAt": "2026-09-24T19:27:15Z",
-      "createdBy": "admin",
-      "id": "gov-2026-00005"
-    },
-    "gov-2026-00006": {
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "ministry": "Maharashtra State Innovation Society",
-      "state": "Maharashtra",
-      "status": "Draft",
-      "title": "Fixed Identity Challenge",
-      "challengeId": "GOV-2026-00006",
-      "updatedAt": "2026-09-24T19:32:36Z",
-      "createdBy": "admin",
-      "id": "gov-2026-00006"
-    },
-    "gov-2026-00007": {
-      "status": "Draft",
-      "title": "Contract Persistence Challenge",
-      "ministry": "Maharashtra State Innovation Society",
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "state": "Maharashtra",
-      "challengeId": "GOV-2026-00007",
-      "updatedAt": "2026-09-24T19:32:37Z",
-      "createdBy": "admin",
-      "id": "gov-2026-00007"
-    },
-    "gov-2026-00009": {
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "ministry": "Maharashtra State Innovation Society",
-      "state": "Maharashtra",
-      "status": "Draft",
-      "title": "Fixed Identity Challenge",
-      "challengeId": "GOV-2026-00009",
-      "updatedAt": "2026-09-24T19:34:18Z",
-      "createdBy": "admin",
-      "id": "gov-2026-00009"
-    },
-    "gov-2026-00010": {
-      "status": "Draft",
-      "title": "Contract Persistence Challenge",
-      "ministry": "Maharashtra State Innovation Society",
-      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
-      "state": "Maharashtra",
-      "challengeId": "GOV-2026-00010",
-      "updatedAt": "2026-09-24T19:34:18Z",
-      "createdBy": "admin",
-      "id": "gov-2026-00010"
-    }
-  },
+  "drafts": {},
   "published": {
-    "gov-2026-periodic-001": {
-      "challengeId": "GOV-2026-PERIODIC-001",
-      "status": "Published",
-      "title": "Periodic Reporting Challenge",
-      "ministry": "Maharashtra State Innovation Society",
+    "gov-2026-00001": {
+      "title": "AI Waste Monitoring for Municipal Compliance",
+      "challengeId": "GOV-2026-00001",
+      "challengeType": "Software",
+      "category": "AI / ML",
+      "categoryList": [
+        "AI / ML",
+        "Web Development"
+      ],
+      "difficulty": "Advanced",
       "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
+      "ministry": "Maharashtra State Innovation Society",
       "state": "Maharashtra",
-      "updatedAt": "2026-09-24T19:34:18Z",
-      "createdBy": "admin",
-      "id": "gov-2026-periodic-001",
-      "periodicChecks": [
+      "status": "Published",
+      "problemStatement": {
+        "title": "",
+        "description": "We need a system to help municipalities identify illegal garbage dumping using citizen reports and CCTV imagery.",
+        "currentSituation": "Current teams still rely on manual review, inconsistent reporting, and fragmented workflows, which slows action across municipal teams and citizen reporting workflows.",
+        "painPoints": [
+          "Reports and evidence are not centralized",
+          "Manual review creates delays and inconsistency",
+          "Priority issues are hard to detect early"
+        ],
+        "affectedGroups": [
+          "Citizens",
+          "Government Officers",
+          "Local Authorities"
+        ],
+        "geographicScope": "Local",
+        "impact": "The lack of timely action leads to service gaps, operational inefficiency, and poorer outcomes for the public and frontline teams."
+      },
+      "objectives": {
+        "primary": "fjn",
+        "secondary": []
+      },
+      "expectedOutcomes": [
         {
-          "checkId": "CHECK-GOV-2026-PERIODIC-001-001",
-          "title": "Monthly progress report",
-          "frequency": "Monthly",
-          "dueDate": "2026-10-31",
-          "notification": "Send your progress report and evidence.",
-          "status": "Completed",
-          "createdAt": "2026-09-24T19:34:18Z",
-          "reports": [
-            {
-              "reportId": "REPORT-CHECK-GOV-2026-PERIODIC-001-001-startup-001",
-              "challengeId": "GOV-2026-PERIODIC-001",
-              "checkId": "CHECK-GOV-2026-PERIODIC-001-001",
-              "startupId": "startup-001",
-              "summary": "Completed the first reporting milestone.",
-              "progress": "Prototype workflow is operational.",
-              "metrics": "95% of test cases passed.",
-              "blockers": "None",
-              "evidence": "https://example.test/report",
-              "status": "Accepted",
-              "submittedAt": "2026-09-24T19:34:18Z",
-              "review": {
-                "decision": "Accepted",
-                "feedback": "Good first milestone. Continue to the next phase.",
-                "reviewedAt": "2026-09-24T19:34:18Z"
-              }
-            }
-          ]
+          "text": "Improved detection coverage across urban hotspots",
+          "order": 1
         },
         {
-          "checkId": "CHECK-GOV-2026-PERIODIC-001-002",
-          "title": "Monthly progress report",
-          "frequency": "Monthly",
-          "dueDate": "2026-11-30",
-          "notification": "Send your progress report and evidence.",
-          "status": "Awaiting Startup Report",
-          "createdAt": "2026-09-24T19:34:18Z",
-          "reports": []
+          "text": "Reduced manual review time for municipal staff",
+          "order": 2
+        },
+        {
+          "text": "Faster escalation and action on illegal dumping complaints",
+          "order": 3
         }
-      ]
+      ],
+      "requirements": {
+        "mandatory": [
+          "Dashboard for monitoring complaints and evidence",
+          "AI-assisted image classification workflow",
+          "Role-based user access"
+        ],
+        "optional": [
+          "Map-based hotspot visualization",
+          "Citizen reporting app"
+        ],
+        "features": [
+          {
+            "name": "User authentication",
+            "priority": "Mandatory"
+          },
+          {
+            "name": "Analytics dashboard",
+            "priority": "Mandatory"
+          }
+        ]
+      },
+      "templateSpecific": {
+        "templateSpecific": {
+          "targetUsers": "",
+          "userRoles": "",
+          "requiredModules": "",
+          "authenticationRequirements": "",
+          "apiIntegrations": "",
+          "browserDeviceRequirements": "",
+          "performanceRequirements": "",
+          "deploymentEnvironment": "",
+          "scalabilityRequirements": ""
+        }
+      },
+      "constraints": {
+        "technical": [
+          "Existing government system integration required",
+          "Low bandwidth support required"
+        ],
+        "budget": {
+          "estimatedBudget": "INR 8-15 lakh",
+          "budgetType": "Flexible"
+        },
+        "deployment": "Government Cloud",
+        "security": [
+          "Encryption",
+          "Audit Logs"
+        ]
+      },
+      "resources": {
+        "dataProvided": "Yes",
+        "datasetType": [],
+        "datasetSize": "",
+        "dataAccess": "Public",
+        "apis": [],
+        "documents": []
+      },
+      "deliverables": [
+        "Working Prototype",
+        "Source Code",
+        "Technical Documentation"
+      ],
+      "platforms": [
+        "Web",
+        "Android"
+      ],
+      "evaluationCriteria": [
+        {
+          "criterion": "Technical Quality",
+          "description": "Model and software quality",
+          "weight": 30
+        },
+        {
+          "criterion": "Innovation",
+          "description": "Novelty and problem-solving approach",
+          "weight": 25
+        },
+        {
+          "criterion": "Impact",
+          "description": "Public value and operational benefit",
+          "weight": 25
+        },
+        {
+          "criterion": "Scalability",
+          "description": "Model and deployment viability",
+          "weight": 20
+        }
+      ],
+      "eligibility": {
+        "participantTypes": [
+          "Startups",
+          "Individual Developers",
+          "Researchers"
+        ],
+        "minTeamSize": 1,
+        "maxTeamSize": 5,
+        "requiredSkills": [
+          "Python",
+          "JavaScript",
+          "AI/ML",
+          "Cloud"
+        ]
+      },
+      "timeline": {
+        "registrationOpen": "",
+        "registrationClose": "",
+        "submissionOpen": "",
+        "submissionDeadline": "",
+        "evaluationStart": "",
+        "resultsDate": ""
+      },
+      "contact": {
+        "publicDepartment": "",
+        "nodalOfficerName": "",
+        "designation": "Deputy Secretary",
+        "officialEmail": "",
+        "officialPhone": "",
+        "internalDepartment": "",
+        "internalOfficerName": ""
+      },
+      "template": "ai",
+      "updatedAt": "2026-09-24T20:20:00Z",
+      "createdBy": "admin",
+      "id": "gov-2026-00001"
     }
   }
 }
