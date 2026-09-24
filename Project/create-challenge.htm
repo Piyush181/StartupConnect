@@ -230,7 +230,7 @@
                             <div class="form-grid">
                                 <div class="form-field"><label for="dataset-availability">Dataset Availability</label><input id="dataset-availability" name="templateSpecific.datasetAvailability"></div>
                                 <div class="form-field"><label for="dataset-format">Dataset Format</label><input id="dataset-format" name="templateSpecific.datasetFormat"></div>
-                                <div class="form-field"><label for="dataset-size">Dataset Size</label><input id="dataset-size" name="templateSpecific.datasetSize"></div>
+                                <div class="form-field"><label for="template-dataset-size">Dataset Size</label><input id="template-dataset-size" name="templateSpecific.datasetSize"></div>
                                 <div class="form-field"><label for="target-variable">Target Variable</label><input id="target-variable" name="templateSpecific.targetVariable"></div>
                                 <div class="form-field"><label for="expected-model-output">Expected Model Output</label><input id="expected-model-output" name="templateSpecific.expectedModelOutput"></div>
                                 <div class="form-field"><label for="baseline-model">Baseline Model</label><input id="baseline-model" name="templateSpecific.baselineModel"></div>
@@ -497,6 +497,7 @@
         </form>
     </div>
 </main>
+<div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
 
 <script>
     const stepPanels = [...document.querySelectorAll('.challenge-step-panel')];
@@ -1027,7 +1028,7 @@
                 purpose: row.querySelectorAll('input')[1].value.trim(),
                 endpoint: row.querySelectorAll('input')[2].value.trim(),
                 authentication: row.querySelector('select').value,
-                documentationUrl: row.querySelectorAll('input')[4].value.trim()
+                documentationUrl: row.querySelectorAll('input')[3]?.value.trim() || ''
             })).filter(api => api.name || api.purpose || api.endpoint || api.documentationUrl),
             documents: []
         };
@@ -1131,21 +1132,34 @@
         statusBox.style.color = isError ? '#a43c3c' : '#0f6b64';
     }
 
+    function showToast(message, isError = false) {
+        const toast = document.createElement('div');
+        toast.className = `toast ${isError ? 'error' : 'success'}`;
+        toast.textContent = message;
+        document.getElementById('toast-region').appendChild(toast);
+        window.setTimeout(() => toast.classList.add('visible'), 10);
+        window.setTimeout(() => { toast.classList.remove('visible'); window.setTimeout(() => toast.remove(), 250); }, 3800);
+    }
+
     async function saveChallenge(shouldPublish = false) {
+        const actionButton = shouldPublish ? document.getElementById('publish-button') : document.getElementById('save-draft-button');
         const payload = collectChallengeState();
         payload.status = shouldPublish ? 'Published' : 'Draft';
         if (!payload.title) {
             setStatus('Please provide a challenge title before saving.', true);
+            showToast('Add a challenge title before saving.', true);
             return;
         }
         try {
+            actionButton.disabled = true;
             setStatus('Saving...');
+            showToast(shouldPublish ? 'Publishing challenge...' : 'Saving draft...');
             const response = await fetch('/api/challenges', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ challenge: payload })
             });
-            const result = await response.json();
+            const result = await response.json().catch(() => ({ message: `Request failed (${response.status}).` }));
             if (!response.ok || !result.ok) {
                 throw new Error(result.message || 'Could not save challenge.');
             }
@@ -1153,17 +1167,22 @@
             challengeIdInput.value = challengeState.challengeId;
             localStorage.setItem(storedKey, JSON.stringify(challengeState));
             setStatus(shouldPublish ? 'Published successfully.' : '✓ Saved just now');
+            showToast(shouldPublish ? 'Challenge published successfully.' : 'Draft saved successfully.');
             if (shouldPublish) {
                 const publishResponse = await fetch(`/api/challenges/${challengeState.challengeId}/publish`, { method: 'POST' });
-                const publishResult = await publishResponse.json();
+                const publishResult = await publishResponse.json().catch(() => ({ message: `Publish failed (${publishResponse.status}).` }));
                 if (!publishResponse.ok || !publishResult.ok) {
                     throw new Error(publishResult.message || 'Publish failed.');
                 }
                 setStatus('Challenge published successfully.');
+                showToast('Challenge published successfully.');
                 window.location.href = '/government-dashboard';
             }
         } catch (error) {
             setStatus(error.message || 'Unable to save the challenge.', true);
+            showToast(error.message || 'Unable to save the challenge.', true);
+        } finally {
+            actionButton.disabled = false;
         }
     }
 
@@ -1203,10 +1222,12 @@
         const isFinal = currentStep >= stepPanels.length;
         if (!isFinal) {
             const requirementFields = [...document.querySelectorAll('.challenge-step-panel.active [required]')];
-            const invalid = requirementFields.find(field => !field.value.trim());
+            const invalid = requirementFields.find(field => !field.checkValidity());
             if (invalid) {
                 invalid.focus();
+                invalid.reportValidity();
                 setStatus('Please complete all required fields before continuing.', true);
+                showToast('Please complete the required fields first.', true);
                 return;
             }
             saveLocalDraft();
