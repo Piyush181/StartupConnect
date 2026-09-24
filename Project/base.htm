@@ -21,8 +21,10 @@
             <a href="/public-challenges">Public challenges</a>
         </nav>
         <div class="nav-actions">
+            {% if session.get("role") not in ["startup", "ministry", "government"] %}
             <a href="/login">Sign in</a>
             <a class="button" href="/join">Join the network</a>
+            {% endif %}
             <button class="mobile-menu" aria-label="Open menu">☰</button>
         </div>
     </header>
