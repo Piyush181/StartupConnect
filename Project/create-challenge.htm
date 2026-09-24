@@ -535,7 +535,7 @@
         department: '',
         ministry: '',
         state: '',
-        status: 'Draft',
+        status: 'created',
         problemStatement: {
             title: '',
             description: '',
@@ -1144,7 +1144,7 @@
     async function saveChallenge(shouldPublish = false) {
         const actionButton = shouldPublish ? document.getElementById('publish-button') : document.getElementById('save-draft-button');
         const payload = collectChallengeState();
-        payload.status = shouldPublish ? 'Published' : 'Draft';
+        payload.status = shouldPublish ? 'currently bidding' : 'created';
         if (!payload.title) {
             setStatus('Please provide a challenge title before saving.', true);
             showToast('Add a challenge title before saving.', true);

@@ -169,7 +169,7 @@ def _default_challenge(template_key="software"):
         "category": template["category"],
         "challengeType": template["challengeType"],
         "difficulty": template["difficulty"],
-        "status": "Draft",
+        "status": "created",
         "createdAt": _now_iso(),
         "updatedAt": _now_iso(),
         "department": "",
@@ -238,7 +238,10 @@ def _serialize_challenges():
     challenges = []
     for bucket in ("drafts", "published"):
         for entry in store.get(bucket, {}).values():
-            challenges.append(entry)
+            challenge = dict(entry)
+            status = challenge.get("status", "created")
+            challenge["status"] = {"Draft": "created", "Published": "currently bidding"}.get(status, status)
+            challenges.append(challenge)
     return sorted(challenges, key=lambda item: item.get("updatedAt", ""), reverse=True)
 
 
@@ -286,6 +289,7 @@ def _public_challenge(challenge):
         "objectives": objectives,
         "expectedOutcomes": challenge.get("expectedOutcomes", []),
         "requirements": challenge.get("requirements", {}),
+        "constraints": challenge.get("constraints", {}),
         "deliverables": challenge.get("deliverables", []),
         "platforms": challenge.get("platforms", []),
         "evaluationCriteria": challenge.get("evaluationCriteria", []),
@@ -449,7 +453,7 @@ def _generate_ai_draft(description):
             "email": "rohitt@ma.gov.in",
             "phone": "+91 98765 43210",
         },
-        "status": "Draft",
+        "status": "created",
         "template": "ai",
         "department": "Municipal Administration",
         "ministry": "Ministry of Housing and Urban Affairs",
@@ -464,7 +468,21 @@ def _generate_ai_draft(description):
 
 @app.get("/")
 def home():
-    return render_template("index.htm")
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"currently bidding", "Ongoing", "Completed"}]
+    try:
+        startup_count = len(list_startup_directory())
+    except Exception:
+        app.logger.exception("Could not load homepage startup metric.")
+        startup_count = 0
+    departments = len({item.get("government", {}).get("department") for item in challenges if item.get("government", {}).get("department")})
+    return render_template(
+        "index.htm",
+        homepage_challenges=challenges[:3],
+        departments=departments,
+        startups=startup_count,
+        active_pilots=sum(item.get("status") == "Ongoing" for item in challenges),
+        pilots_scaled=sum(item.get("status") == "Completed" for item in challenges),
+    )
 
 
 @app.get("/pages.css")
@@ -501,13 +519,21 @@ def challenges():
 
 @app.get("/public-challenges")
 def public_challenges():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "Published"]
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"currently bidding", "Ongoing", "Completed"}]
     return render_template("public-challenges.htm", challenges=challenges)
+
+
+@app.get("/public-challenges/<challenge_id>")
+def public_challenge_view(challenge_id):
+    challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
+    if not challenge or challenge.get("status") not in {"currently bidding", "Ongoing", "Completed"}:
+        return ("Challenge not found", 404)
+    return render_template("public-challenge-view.htm", challenge=_public_challenge(challenge))
 
 
 @app.get("/api/public/challenges")
 def public_challenges_api():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "Published"]
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"currently bidding", "Ongoing", "Completed"}]
     return jsonify({"ok": True, "challenges": challenges})
 
 
@@ -566,9 +592,10 @@ def save_challenge():
     if not challenge.get("id"):
         challenge["id"] = f"{challenge_id.lower()}"
     store = _read_store()
-    bucket = "published" if challenge.get("status") == "Published" else "drafts"
+    challenge["status"] = "currently bidding" if challenge.get("status") in {"Published", "currently bidding"} else "created"
+    bucket = "published" if challenge.get("status") in {"currently bidding", "Ongoing", "Completed"} else "drafts"
     store[bucket][challenge["id"]] = challenge
-    if bucket == "drafts" and challenge.get("status") == "Published":
+    if bucket == "published":
         store["drafts"].pop(challenge["id"], None)
     _write_store(store)
     return jsonify({"ok": True, "challenge": challenge, "message": "Challenge saved successfully."})
@@ -605,7 +632,7 @@ def publish_challenge(challenge_id):
             break
     if not found:
         return jsonify({"ok": False, "message": "Challenge not found."}), 404
-    found["status"] = "Published"
+    found["status"] = "currently bidding"
     found["updatedAt"] = _now_iso()
     if target_bucket == "drafts":
         store["drafts"].pop(found["id"], None)
