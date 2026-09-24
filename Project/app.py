@@ -13,7 +13,6 @@ from database import (
     authenticate_ministry,
     authenticate_startup,
     get_startup_profile,
-    save_challenge_contract,
     save_contract_report,
     save_startup_registration,
 )
@@ -331,15 +330,6 @@ def _next_periodic_due_date(due_date, frequency):
     return (current + timedelta(days=days)).strftime("%Y-%m-%d")
 
 
-def _persist_contract(challenge):
-    try:
-        save_challenge_contract(challenge, challenge.get("createdBy") or "ministry-user")
-    except (DatabaseConfigurationError, OSError):
-        app.logger.warning("Contract %s was saved locally; contracts database was unavailable.", challenge.get("challengeId"))
-    except Exception:
-        app.logger.exception("Contract %s could not be written to the contracts table.", challenge.get("challengeId"))
-
-
 def _generate_ai_draft(description):
     normalized = (description or "").strip()
     if not normalized:
@@ -511,8 +501,7 @@ def public_challenges_api():
 @app.get("/government-dashboard")
 @session_required("ministry")
 def government_dashboard():
-    challenges = _serialize_challenges()
-    return render_template("government-dashboard.htm", challenges=challenges)
+    return render_template("government-dashboard.htm", challenges=_serialize_challenges())
 
 
 @app.get("/create-challenge")
@@ -569,7 +558,6 @@ def save_challenge():
     if bucket == "drafts" and challenge.get("status") == "Published":
         store["drafts"].pop(challenge["id"], None)
     _write_store(store)
-    _persist_contract(challenge)
     return jsonify({"ok": True, "challenge": challenge, "message": "Challenge saved successfully."})
 
 
@@ -610,7 +598,6 @@ def publish_challenge(challenge_id):
         store["drafts"].pop(found["id"], None)
     store["published"][found["id"]] = found
     _write_store(store)
-    _persist_contract(found)
     return jsonify({"ok": True, "challenge": found, "message": "Challenge published successfully."})
 
 
@@ -648,7 +635,6 @@ def schedule_periodic_check(challenge_id):
             store[bucket][challenge["id"]] = challenge
             break
     _write_store(store)
-    _persist_contract(challenge)
     return jsonify({"ok": True, "check": check, "message": "Periodic check scheduled and startup notification queued."})
 
 
