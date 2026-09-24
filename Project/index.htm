@@ -607,15 +607,15 @@
                     src="https://images.unsplash.com/photo-1774069129040-05a274355383?auto=format&fit=crop&w=1200&q=85"
                     alt="Modern city infrastructure at dusk">
                 <div class="pulse">
-                    <div class="pulse-label">Live network pulse</div><strong>18 active pilots</strong><small>Across
+                    <div class="pulse-label">Live network pulse</div><strong>{{ active_pilots }} active pilots</strong><small>Across
                         Maharashtra · updated today</small>
                 </div>
             </div>
         </div>
         <div class="container stats">
-            <div class="stat"><strong>42</strong><span>Departments</span></div>
-            <div class="stat"><strong>186</strong><span>Startups</span></div>
-            <div class="stat"><strong>27</strong><span>Pilots scaled</span></div>
+            <div class="stat"><strong>{{ departments }}</strong><span>Departments</span></div>
+            <div class="stat"><strong>{{ startups }}</strong><span>Startups</span></div>
+            <div class="stat"><strong>{{ pilots_scaled }}</strong><span>Pilots scaled</span></div>
         </div>
         <section id="mechanism" class="mechanism">
             <div class="container">
@@ -627,32 +627,11 @@
                     <p class="section-intro">One transparent workflow for departments, founders and independent
                         evaluators, with the right guardrails at every stage.</p>
                 </div>
-                <div class="steps">
-                    <div class="step active"><b>01</b>Discover</div>
-                    <div class="step"><b>02</b>Apply</div>
-                    <div class="step"><b>03</b>Screen</div>
-                    <div class="step"><b>04</b>Evaluate</div>
-                    <div class="step"><b>05</b>Pilot</div>
-                    <div class="step"><b>06</b>Measure</div>
-                    <div class="step"><b>07</b>Pay</div>
-                    <div class="step"><b>08</b>Validate</div>
-                    <div class="step"><b>09</b>Scale</div>
-                </div>
-                <div id="directory" class="feature-grid">
-                    <article class="feature"><span class="feature-number">01 / FIT</span>
-                        <h3>Discover the right fit</h3>
-                        <p>Browse outcome-led problem statements from departments actively seeking new solutions.</p>
-                    </article>
-                    <article class="feature"><span class="feature-number">02 / TRUST</span>
-                        <h3>Evaluate with confidence</h3>
-                        <p>Structured eligibility, weighted scorecards and independent validation keep decisions fair.
-                        </p>
-                    </article>
-                    <article class="feature"><span class="feature-number">03 / IMPACT</span>
-                        <h3>Scale what works</h3>
-                        <p>Milestone contracts, performance evidence and procurement-ready pathways turn pilots into
-                            impact.</p>
-                    </article>
+                <div class="mechanism-carousel" id="directory">
+                    <div class="mechanism-card active"><span class="feature-number">01 / DEFINE</span><h3>Departments frame the need.</h3><p>Clear problem statements describe the outcome, context and constraints without prescribing a solution.</p></div>
+                    <div class="mechanism-card"><span class="feature-number">02 / TEST</span><h3>Startups prove the fit.</h3><p>Teams apply against a transparent brief and show the evidence behind their approach.</p></div>
+                    <div class="mechanism-card"><span class="feature-number">03 / SCALE</span><h3>Everyone learns from the pilot.</h3><p>Milestones and measurement turn a promising experiment into a procurement-ready pathway.</p></div>
+                    <div class="mechanism-controls"><button type="button" class="mechanism-control" data-direction="previous">← Previous</button><span id="mechanism-position">1 / 3</span><button type="button" class="mechanism-control" data-direction="next">Next →</button></div>
                 </div>
             </div>
         </section>
@@ -662,37 +641,9 @@
                     <div>
                         <div class="section-kicker">Now accepting applications</div>
                         <h2>Challenges that need a new answer.</h2>
-                    </div><a class="button outline" href="#challenges">View all challenges</a>
+                    </div><a class="button outline" href="public-challenges">View all challenges</a>
                 </div>
-                <div class="challenge-list">
-                    <article class="challenge">
-                        <div>
-                            <div class="challenge-type">Open · PS MH-041</div>
-                            <h3>Predictive crop advisory for smallholder farms</h3>
-                        </div>
-                        <p>Department of Agriculture<br>Agri-tech</p>
-                        <div class="meta"><strong>₹35–50 lakh</strong>Apply by 18 Aug 2026</div><span
-                            class="arrow">↗</span>
-                    </article>
-                    <article class="challenge">
-                        <div>
-                            <div class="challenge-type">Open · PS MH-038</div>
-                            <h3>Low-cost remote screening for diabetic retinopathy</h3>
-                        </div>
-                        <p>Public Health Department<br>Health-tech</p>
-                        <div class="meta"><strong>₹50–75 lakh</strong>Apply by 02 Sep 2026</div><span
-                            class="arrow">↗</span>
-                    </article>
-                    <article class="challenge">
-                        <div>
-                            <div class="challenge-type">Pilot intake · PS MH-034</div>
-                            <h3>Safer last-mile mobility for tier-2 cities</h3>
-                        </div>
-                        <p>Urban Development Department<br>Mobility</p>
-                        <div class="meta"><strong>₹25–40 lakh</strong>Apply by 26 Jul 2026</div><span
-                            class="arrow">↗</span>
-                    </article>
-                </div>
+                <div class="challenge-list">{% for challenge in homepage_challenges %}<a class="challenge" href="/public-challenges/{{ challenge.challengeId }}"><div><div class="challenge-type">{{ challenge.status }} · {{ challenge.challengeId }}</div><h3>{{ challenge.title }}</h3></div><p>{{ challenge.government.department }}<br>{{ challenge.category or challenge.challengeType }}</p><div class="meta"><strong>{{ challenge.constraints.budget.estimatedBudget or 'Budget to be announced' }}</strong>Apply by {{ challenge.timeline.submissionDeadline or 'date to be announced' }}</div><span class="arrow">↗</span></a>{% else %}<p class="empty-state">No live challenges are available yet.</p>{% endfor %}</div>
             </div>
         </section>
         <section id="join" class="cta">
@@ -716,7 +667,7 @@
                 </div>
                 <div class="footer-links">
                     <div>
-                        <h4>Platform</h4><a href="#challenges">Open challenges</a><a href="/directory">Startup
+                        <h4>Platform</h4><a href="/public-challenges">Open challenges</a><a href="/directory">Startup
                             directory</a><a href="/public-challenges">Public challenges</a>
                     </div>
                     <div>
@@ -732,6 +683,9 @@
         const menuButton = document.querySelector('.mobile-menu');
         const nav = document.querySelector('.nav-links');
         menuButton.addEventListener('click', () => { nav.classList.toggle('is-open'); nav.style.display = nav.classList.contains('is-open') ? 'grid' : ''; });
-        document.querySelectorAll('.step').forEach(step => step.addEventListener('click', () => { document.querySelectorAll('.step').forEach(item => item.classList.remove('active')); step.classList.add('active'); }));
+        const mechanismCards = [...document.querySelectorAll('.mechanism-card')];
+        let mechanismIndex = 0;
+        const renderMechanism = () => { mechanismCards.forEach((card, index) => card.classList.toggle('active', index === mechanismIndex)); document.querySelector('#mechanism-position').textContent = `${mechanismIndex + 1} / ${mechanismCards.length}`; };
+        document.querySelectorAll('.mechanism-control').forEach(button => button.addEventListener('click', () => { mechanismIndex = (mechanismIndex + (button.dataset.direction === 'next' ? 1 : -1) + mechanismCards.length) % mechanismCards.length; renderMechanism(); }));
     </script>
 {% endblock %}

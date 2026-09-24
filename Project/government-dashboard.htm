@@ -13,15 +13,15 @@
     <section class="stat-grid">
         <article class="stat-card">
             <span class="stat-label">Drafts</span>
-            <strong>{{ challenges | selectattr('status', 'equalto', 'Draft') | list | length }}</strong>
+            <strong>{{ challenges | selectattr('status', 'equalto', 'created') | list | length }}</strong>
         </article>
         <article class="stat-card">
             <span class="stat-label">Published</span>
-            <strong>{{ challenges | selectattr('status', 'equalto', 'Published') | list | length }}</strong>
+            <strong>{{ challenges | selectattr('status', 'equalto', 'currently bidding') | list | length }}</strong>
         </article>
         <article class="stat-card">
             <span class="stat-label">Active</span>
-            <strong>{{ challenges | selectattr('status', 'equalto', 'Published') | list | length }}</strong>
+            <strong>{{ challenges | selectattr('status', 'equalto', 'Ongoing') | list | length }}</strong>
         </article>
     </section>
 
