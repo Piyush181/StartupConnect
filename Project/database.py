@@ -18,7 +18,7 @@ MYSQL_CONFIG = {
     "host": os.getenv("STARTUP_CONNECT_DB_HOST", "localhost"),
     "port": int(os.getenv("STARTUP_CONNECT_DB_PORT", "3306")),
     "user": os.getenv("STARTUP_CONNECT_DB_USER", "root"),
-    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "apIEHewSeq8"),
+    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "Soham@14"),
     "database": "startupconnect",
 }
 
@@ -68,6 +68,42 @@ CREATE TABLE IF NOT EXISTS minfo (
     ministry_id_encrypted TEXT NOT NULL,
     auth_code_encrypted TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+CONTRACTS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS contracts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    challenge_id VARCHAR(100) NOT NULL UNIQUE,
+    title VARCHAR(500) NOT NULL,
+    government_body VARCHAR(255) NOT NULL,
+    department VARCHAR(255) NOT NULL,
+    state VARCHAR(100) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    created_by VARCHAR(255) NOT NULL,
+    challenge_data LONGTEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_contracts_status (status),
+    INDEX idx_contracts_created_by (created_by)
+)
+"""
+
+CONTRACT_REPORTS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS contract_reports (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    report_id VARCHAR(120) NOT NULL UNIQUE,
+    challenge_id VARCHAR(100) NOT NULL,
+    check_id VARCHAR(120) NOT NULL,
+    startup_id VARCHAR(255) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    report_data LONGTEXT NOT NULL,
+    review_data LONGTEXT,
+    submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TIMESTAMP NULL,
+    INDEX idx_contract_reports_challenge (challenge_id),
+    INDEX idx_contract_reports_startup (startup_id),
+    INDEX idx_contract_reports_status (status)
 )
 """
 
@@ -174,6 +210,7 @@ def _open_connection():
 def _prepare_auth_tables(connection, cursor, cipher: Fernet) -> None:
     cursor.execute(SCHEMA_SQL)
     cursor.execute(MINFO_SCHEMA_SQL)
+    cursor.execute(CONTRACTS_SCHEMA_SQL)
     cursor.execute("SELECT id FROM minfo LIMIT 1")
     if cursor.fetchone() is None:
         cursor.execute(
@@ -224,40 +261,80 @@ def authenticate_ministry(ministry_id: str, auth_code: str) -> bool:
         connection.close()
 
 
-def get_startup_profile(business_id: str) -> dict[str, Any] | None:
-    """Fetch the non-sensitive company profile for the authenticated startup."""
-    cipher = _cipher()
+def save_challenge_contract(challenge: Mapping[str, Any], created_by: str) -> None:
+    """Persist the complete challenge definition in the contracts table."""
+    challenge_id = str(challenge.get("challengeId", "")).strip()
+    if not challenge_id:
+        raise ValueError("Challenge ID is required before saving a contract.")
+
+    title = str(challenge.get("title", "Untitled challenge")).strip() or "Untitled challenge"
+    government_body = str(challenge.get("ministry", "")).strip()
+    department = str(challenge.get("department", "")).strip()
+    state = str(challenge.get("state", "")).strip()
+    status = str(challenge.get("status", "Draft")).strip() or "Draft"
+    owner = str(created_by or "ministry-user").strip() or "ministry-user"
+
     connection = _open_connection()
     cursor = connection.cursor()
     try:
+        cursor.execute(CONTRACTS_SCHEMA_SQL)
         cursor.execute(
-            """SELECT business_id_encrypted, business_name, business_type,
-                      ownership_details, incorporation_date, sector, domain,
-                      employee_count, current_stage, company_address,
-                      company_email, company_phone, website, pincode, gst_state
-               FROM startup_registrations WHERE business_id_hash = %s""",
-            (_lookup_hash(business_id.strip()),),
+            """INSERT INTO contracts (
+                challenge_id, title, government_body, department, state,
+                status, created_by, challenge_data
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                title = VALUES(title),
+                government_body = VALUES(government_body),
+                department = VALUES(department),
+                state = VALUES(state),
+                status = VALUES(status),
+                created_by = VALUES(created_by),
+                challenge_data = VALUES(challenge_data)""",
+            (
+                challenge_id,
+                title,
+                government_body,
+                department,
+                state,
+                status,
+                owner,
+                json.dumps(dict(challenge), ensure_ascii=True),
+            ),
         )
-        row = cast(tuple[Any, ...] | None, cursor.fetchone())
-        if not row:
-            return None
-        return {
-            "business_id": cipher.decrypt(row[0].encode()).decode(),
-            "business_name": row[1],
-            "business_type": row[2],
-            "ownership_details": row[3],
-            "incorporation_date": str(row[4]),
-            "sector": row[5],
-            "domain": row[6],
-            "employee_count": row[7],
-            "current_stage": row[8],
-            "company_address": row[9],
-            "company_email": row[10],
-            "company_phone": row[11],
-            "website": row[12],
-            "pincode": row[13],
-            "gst_state": row[14],
-        }
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def save_contract_report(report: Mapping[str, Any]) -> None:
+    """Persist a startup's periodic report for ministry review."""
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(CONTRACT_REPORTS_SCHEMA_SQL)
+        cursor.execute(
+            """INSERT INTO contract_reports (
+                report_id, challenge_id, check_id, startup_id, status,
+                report_data, review_data
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+                status = VALUES(status),
+                report_data = VALUES(report_data),
+                review_data = VALUES(review_data),
+                reviewed_at = CASE WHEN VALUES(review_data) IS NOT NULL THEN CURRENT_TIMESTAMP ELSE reviewed_at END""",
+            (
+                str(report.get("reportId", "")),
+                str(report.get("challengeId", "")),
+                str(report.get("checkId", "")),
+                str(report.get("startupId", "")),
+                str(report.get("status", "Submitted")),
+                json.dumps(dict(report), ensure_ascii=True),
+                json.dumps(report.get("review"), ensure_ascii=True) if report.get("review") else None,
+            ),
+        )
+        connection.commit()
     finally:
         cursor.close()
         connection.close()
