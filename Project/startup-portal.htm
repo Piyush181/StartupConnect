@@ -3,4 +3,39 @@
 {% block content %}
 <main class="container page-hero"><div class="kicker">Startup workspace</div><h1>Your next public impact starts here.</h1><p>Review matched challenges, keep your applications moving and bring your evidence into the pilot conversation.</p><div class="hero-actions"><a class="button" href="/challenges">Browse challenges</a><a class="button outline" href="/how-it-works">Review the mechanism</a></div></main>
 <section class="container page-content"><div class="feature-grid"><article class="feature"><span class="feature-number">01 / MATCHES</span><h3>Relevant challenges</h3><p>Your capability profile will surface public problems that are ready for a new answer.</p></article><article class="feature"><span class="feature-number">02 / APPLICATIONS</span><h3>Application progress</h3><p>Keep your team aligned from first response through screening and evaluation.</p></article><article class="feature"><span class="feature-number">03 / EVIDENCE</span><h3>Pilot readiness</h3><p>Prepare the evidence that helps a good pilot become a procurement-ready pathway.</p></article></div></section>
+<section class="container challenge-panel startup-report-panel">
+	<div class="panel-head"><h2>Periodic report notifications</h2><span class="form-note">Phase 1: startup report submission</span></div>
+	<div id="startup-checks" class="report-review-list"><p class="form-note">Loading notifications...</p></div>
+</section>
+
+<script>
+	const checksContainer = document.getElementById('startup-checks');
+	async function loadPeriodicChecks() {
+		const response = await fetch('/api/periodic-checks');
+		const result = await response.json();
+		if (!response.ok || !result.checks.length) {
+			checksContainer.innerHTML = '<p class="form-note">No periodic report notifications yet.</p>';
+			return;
+		}
+		checksContainer.innerHTML = result.checks.map(item => {
+			const report = item.report;
+			const check = item.check;
+			if (report) {
+				return `<article class="report-review-card"><div><span class="challenge-id">${item.challengeId}</span><h3>${item.challengeTitle}</h3><p>${check.notification}</p></div><div class="report-meta"><span>Due ${check.dueDate}</span><span>${report.status}</span></div>${report.review ? `<p><strong>Government feedback:</strong> ${report.review.feedback || report.review.decision}</p>` : ''}</article>`;
+			}
+			return `<article class="report-review-card"><div><span class="challenge-id">${item.challengeId}</span><h3>${item.challengeTitle}</h3><p>${check.notification}</p><div class="report-meta"><span>${check.frequency}</span><span>Due ${check.dueDate}</span><span>${check.status}</span></div></div><form class="startup-report-form" data-check-id="${check.checkId}"><textarea name="summary" required placeholder="What was completed during this period?"></textarea><textarea name="progress" placeholder="Progress against milestones"></textarea><textarea name="metrics" placeholder="Metrics or results"></textarea><textarea name="blockers" placeholder="Blockers or support needed"></textarea><input name="evidence" placeholder="Evidence links or document references"><button class="button small" type="submit">Submit Report</button><span class="form-message"></span></form></article>`;
+		}).join('');
+		document.querySelectorAll('.startup-report-form').forEach(form => {
+			form.onsubmit = async event => {
+				event.preventDefault();
+				const status = form.querySelector('.form-message');
+				const response = await fetch(`/api/periodic-checks/${form.dataset.checkId}/reports`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+				const result = await response.json();
+				status.textContent = result.message;
+				if (response.ok) loadPeriodicChecks();
+			};
+		});
+	}
+	loadPeriodicChecks();
+</script>
 {% endblock %}

@@ -12,12 +12,17 @@ from database import (
     DuplicateBusinessIdError,
     authenticate_ministry,
     authenticate_startup,
+    save_challenge_contract,
+    save_contract_report,
     save_startup_registration,
 )
 
 
 ROOT = Path(__file__).parent
 CHALLENGE_STORE_PATH = ROOT / "challenge_store.json"
+FIXED_GOVERNMENT_BODY = "Maharashtra State Innovation Society"
+FIXED_DEPARTMENT = "Department of Skills, Employment, Entrepreneurship and Innovation"
+FIXED_STATE = "Maharashtra"
 app = Flask(__name__, static_folder=str(ROOT), template_folder=str(ROOT))
 app.secret_key = os.getenv("STARTUP_CONNECT_SESSION_SECRET", "development-only-change-this-session-secret")
 app.config.update(
@@ -38,6 +43,13 @@ def session_required(role: str):
             return view(*args, **kwargs)
         return wrapped
     return decorator
+
+
+def ministry_api_required():
+    """Reject unauthenticated or non-ministry API requests."""
+    if session.get("role") != "ministry":
+        return jsonify({"ok": False, "message": "Authentication required for ministry actions."}), 401
+    return None
 
 
 TEMPLATE_LIBRARY = {
@@ -211,32 +223,106 @@ def _serialize_challenges():
     return sorted(challenges, key=lambda item: item.get("updatedAt", ""), reverse=True)
 
 
+def _find_periodic_check(store, check_id):
+    for challenge in _serialize_challenges():
+        for check in challenge.get("periodicChecks", []):
+            if check.get("checkId") == check_id:
+                return challenge, check
+    return None, None
+
+
+def _next_periodic_due_date(due_date, frequency):
+    try:
+        current = datetime.strptime(due_date, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return due_date
+    days = {"Monthly": 30, "Quarterly": 90}.get(frequency)
+    if not days:
+        return due_date
+    return (current + timedelta(days=days)).strftime("%Y-%m-%d")
+
+
+def _persist_contract(challenge):
+    try:
+        save_challenge_contract(challenge, challenge.get("createdBy") or "ministry-user")
+    except (DatabaseConfigurationError, OSError):
+        app.logger.warning("Contract %s was saved locally; contracts database was unavailable.", challenge.get("challengeId"))
+    except Exception:
+        app.logger.exception("Contract %s could not be written to the contracts table.", challenge.get("challengeId"))
+
+
 def _generate_ai_draft(description):
     normalized = (description or "").strip()
     if not normalized:
         raise ValueError("A brief problem description is required to generate a draft.")
-    title = "AI Waste Monitoring for Municipal Compliance"
-    return {
-        "title": title,
-        "challengeType": "Software",
-        "category": "AI / ML",
-        "difficulty": "Advanced",
-        "problemStatement": {
-            "description": "We need a system to help municipalities identify illegal garbage dumping using citizen reports and CCTV imagery.",
-            "currentSituation": "Municipal teams currently rely on manual inspections and inconsistent reporting, which slows response times and creates gaps in enforcement.",
-            "painPoints": [
-                "Anonymous complaints are not centrally tracked",
-                "CCTV footage is reviewed manually",
-                "Illegal dumping hotspots are difficult to prioritize",
-            ],
-            "affectedGroups": ["Citizens", "Local Authorities", "Government Officers"],
-            "geographicScope": "Local",
-            "impact": "The lack of timely detection leads to environmental degradation, public complaints, and delayed enforcement.",
-        },
-        "objectives": [
+
+    lower = normalized.lower()
+
+    if any(keyword in lower for keyword in ["telemedicine", "clinic", "health", "medical", "patient"]):
+        title = "AI-Powered Rural Telemedicine Monitoring Platform"
+        category = "AI / ML"
+        challenge_type = "Software"
+        problem_description = "We need an AI-driven telemedicine platform that helps clinics and health workers monitor rural patient care, triage urgent needs, and improve follow-up coordination in remote communities."
+        premise = "remote villages, local clinics, and underserved communities"
+        phases = [
+            "Build a patient monitoring and triage workflow for rural healthcare teams",
+            "Use AI to identify high-risk cases and support clinician decisions",
+            "Improve continuity of care in underserved regions",
+        ]
+    elif any(keyword in lower for keyword in ["transport", "mobility", "traffic", "route", "logistics"]):
+        title = "AI Mobility and Route Optimization Platform"
+        category = "AI / ML"
+        challenge_type = "Software"
+        problem_description = "We need an intelligent mobility platform to improve route planning, reduce delays, and support faster civic transportation decisions for urban and rural mobility networks."
+        premise = "urban mobility networks and emergency transport operations"
+        phases = [
+            "Improve route planning and delivery efficiency",
+            "Detect bottlenecks and high-risk travel patterns",
+            "Support a safer and more responsive mobility system",
+        ]
+    elif any(keyword in lower for keyword in ["education", "student", "school", "learning", "teacher"]):
+        title = "AI Education Insight and Learning Support System"
+        category = "AI / ML"
+        challenge_type = "Software"
+        problem_description = "We need a learning support platform that helps schools and education departments detect learning gaps, personalize support, and improve student outcomes using data-driven insights."
+        premise = "schools, teachers, and student support systems"
+        phases = [
+            "Support teachers with actionable student insights",
+            "Identify learners needing intervention early",
+            "Improve classroom and program effectiveness",
+        ]
+    else:
+        title = "AI Waste Monitoring for Municipal Compliance"
+        category = "AI / ML"
+        challenge_type = "Software"
+        problem_description = "We need a system to help municipalities identify illegal garbage dumping using citizen reports and CCTV imagery."
+        premise = "municipal teams and citizen reporting workflows"
+        phases = [
             "Create a monitoring workflow for citizens and local authorities",
             "Use AI to identify illegal dumping hotspots from reports and CCTV feeds",
             "Reduce response time for municipal enforcement teams",
+        ]
+
+    title = title if title else "AI Challenge Draft"
+    return {
+        "title": title,
+        "challengeType": challenge_type,
+        "category": category,
+        "difficulty": "Advanced",
+        "problemStatement": {
+            "description": problem_description,
+            "currentSituation": f"Current teams still rely on manual review, inconsistent reporting, and fragmented workflows, which slows action across {premise}.",
+            "painPoints": [
+                "Reports and evidence are not centralized",
+                "Manual review creates delays and inconsistency",
+                "Priority issues are hard to detect early",
+            ],
+            "affectedGroups": ["Citizens", "Local Authorities", "Government Officers"],
+            "geographicScope": "Local",
+            "impact": "The lack of timely action leads to service gaps, operational inefficiency, and poorer outcomes for the public and frontline teams.",
+        },
+        "objectives": [
+            *phases,
         ],
         "expectedOutcomes": [
             {"text": "Improved detection coverage across urban hotspots", "order": 1},
@@ -316,22 +402,29 @@ def page(page):
 
 @app.get("/challenges")
 def challenges():
+    if session.get("role") == "ministry":
+        return redirect("/government-dashboard")
     return redirect("/#challenges")
 
 
 @app.get("/government-dashboard")
+@session_required("ministry")
 def government_dashboard():
     challenges = _serialize_challenges()
     return render_template("government-dashboard.htm", challenges=challenges)
 
 
 @app.get("/create-challenge")
+@session_required("ministry")
 def create_challenge():
     return render_template("create-challenge.htm", templates=TEMPLATE_LIBRARY)
 
 
 @app.post("/api/challenges/generate-draft")
 def generate_challenge_draft():
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
     data = request.get_json(silent=True) or {}
     description = str(data.get("description") or "").strip()
     if not description:
@@ -345,18 +438,28 @@ def generate_challenge_draft():
 
 @app.get("/api/challenges")
 def list_challenges():
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
     return jsonify({"ok": True, "challenges": _serialize_challenges()})
 
 
 @app.post("/api/challenges")
 def save_challenge():
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
     payload = request.get_json(silent=True) or {}
     challenge = payload.get("challenge") or payload
     if not challenge:
         return jsonify({"ok": False, "message": "Challenge data is required."}), 400
+    challenge["ministry"] = FIXED_GOVERNMENT_BODY
+    challenge["department"] = FIXED_DEPARTMENT
+    challenge["state"] = FIXED_STATE
     challenge_id = str(challenge.get("challengeId") or _challenge_id_for(_read_store())).strip()
     challenge["challengeId"] = challenge_id
     challenge["updatedAt"] = _now_iso()
+    challenge["createdBy"] = session.get("ministry_id") or "ministry-user"
     if not challenge.get("id"):
         challenge["id"] = f"{challenge_id.lower()}"
     store = _read_store()
@@ -365,11 +468,15 @@ def save_challenge():
     if bucket == "drafts" and challenge.get("status") == "Published":
         store["drafts"].pop(challenge["id"], None)
     _write_store(store)
+    _persist_contract(challenge)
     return jsonify({"ok": True, "challenge": challenge, "message": "Challenge saved successfully."})
 
 
 @app.get("/api/challenges/<challenge_id>")
 def get_challenge(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
     store = _read_store()
     for bucket in ("drafts", "published"):
         for key, value in store.get(bucket, {}).items():
@@ -380,6 +487,9 @@ def get_challenge(challenge_id):
 
 @app.post("/api/challenges/<challenge_id>/publish")
 def publish_challenge(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
     store = _read_store()
     found = None
     target_bucket = None
@@ -399,7 +509,171 @@ def publish_challenge(challenge_id):
         store["drafts"].pop(found["id"], None)
     store["published"][found["id"]] = found
     _write_store(store)
+    _persist_contract(found)
     return jsonify({"ok": True, "challenge": found, "message": "Challenge published successfully."})
+
+
+@app.post("/api/challenges/<challenge_id>/periodic-checks")
+def schedule_periodic_check(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title") or "Periodic progress report").strip()
+    frequency = str(data.get("frequency") or "Monthly").strip()
+    due_date = str(data.get("dueDate") or "").strip()
+    notification = str(data.get("notification") or "Please submit your periodic progress report.").strip()
+    if not due_date:
+        return jsonify({"ok": False, "message": "A first report date is required."}), 400
+
+    store = _read_store()
+    challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    check = {
+        "checkId": f"CHECK-{challenge_id}-{len(challenge.get('periodicChecks', [])) + 1:03d}",
+        "title": title,
+        "frequency": frequency,
+        "dueDate": due_date,
+        "notification": notification,
+        "status": "Awaiting Startup Report",
+        "createdAt": _now_iso(),
+        "reports": [],
+    }
+    challenge.setdefault("periodicChecks", []).append(check)
+    challenge["updatedAt"] = _now_iso()
+    for bucket in ("drafts", "published"):
+        if challenge.get("id") in store.get(bucket, {}):
+            store[bucket][challenge["id"]] = challenge
+            break
+    _write_store(store)
+    _persist_contract(challenge)
+    return jsonify({"ok": True, "check": check, "message": "Periodic check scheduled and startup notification queued."})
+
+
+@app.get("/api/periodic-checks")
+def startup_periodic_checks():
+    if session.get("role") != "startup":
+        return jsonify({"ok": False, "message": "Startup authentication required."}), 401
+    startup_id = session.get("business_id") or "startup-user"
+    checks = []
+    for challenge in _serialize_challenges():
+        if challenge.get("status") != "Published":
+            continue
+        for check in challenge.get("periodicChecks", []):
+            reports = [report for report in check.get("reports", []) if report.get("startupId") == startup_id]
+            checks.append({
+                "challengeId": challenge.get("challengeId"),
+                "challengeTitle": challenge.get("title"),
+                "check": {key: value for key, value in check.items() if key != "reports"},
+                "report": reports[-1] if reports else None,
+            })
+    return jsonify({"ok": True, "checks": checks})
+
+
+@app.post("/api/periodic-checks/<check_id>/reports")
+def submit_periodic_report(check_id):
+    if session.get("role") != "startup":
+        return jsonify({"ok": False, "message": "Startup authentication required."}), 401
+    data = request.get_json(silent=True) or {}
+    summary = str(data.get("summary") or "").strip()
+    if not summary:
+        return jsonify({"ok": False, "message": "A progress summary is required."}), 400
+    store = _read_store()
+    challenge, check = _find_periodic_check(store, check_id)
+    if not challenge or not check:
+        return jsonify({"ok": False, "message": "Periodic check not found."}), 404
+    report = {
+        "reportId": f"REPORT-{check_id}-{session.get('business_id', 'startup-user')}",
+        "challengeId": challenge.get("challengeId"),
+        "checkId": check_id,
+        "startupId": session.get("business_id") or "startup-user",
+        "summary": summary,
+        "progress": str(data.get("progress") or "").strip(),
+        "metrics": str(data.get("metrics") or "").strip(),
+        "blockers": str(data.get("blockers") or "").strip(),
+        "evidence": str(data.get("evidence") or "").strip(),
+        "status": "Submitted for Government Review",
+        "submittedAt": _now_iso(),
+        "review": None,
+    }
+    check.setdefault("reports", [])
+    check["reports"] = [item for item in check["reports"] if item.get("startupId") != report["startupId"]]
+    check["reports"].append(report)
+    check["status"] = "Report Submitted - Government Review Pending"
+    for bucket in ("drafts", "published"):
+        if challenge.get("id") in store.get(bucket, {}):
+            store[bucket][challenge["id"]] = challenge
+            break
+    _write_store(store)
+    try:
+        save_contract_report(report)
+    except Exception:
+        app.logger.exception("Report %s was saved locally but could not be written to contract_reports.", report["reportId"])
+    return jsonify({"ok": True, "report": report, "message": "Report submitted for government review."})
+
+
+@app.get("/api/periodic-reports")
+def government_periodic_reports():
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    reports = []
+    for challenge in _serialize_challenges():
+        for check in challenge.get("periodicChecks", []):
+            for report in check.get("reports", []):
+                reports.append({
+                    "challengeId": challenge.get("challengeId"),
+                    "challengeTitle": challenge.get("title"),
+                    "check": {key: value for key, value in check.items() if key != "reports"},
+                    "report": report,
+                })
+    return jsonify({"ok": True, "reports": reports})
+
+
+@app.post("/api/periodic-reports/<report_id>/review")
+def review_periodic_report(report_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    data = request.get_json(silent=True) or {}
+    decision = str(data.get("decision") or "").strip()
+    feedback = str(data.get("feedback") or "").strip()
+    if decision not in {"Accepted", "Changes Requested"}:
+        return jsonify({"ok": False, "message": "Choose Accepted or Changes Requested."}), 400
+    store = _read_store()
+    for challenge in _serialize_challenges():
+        for check in challenge.get("periodicChecks", []):
+            for report in check.get("reports", []):
+                if report.get("reportId") != report_id:
+                    continue
+                report["status"] = decision
+                report["review"] = {"decision": decision, "feedback": feedback, "reviewedAt": _now_iso()}
+                check["status"] = "Accepted" if decision == "Accepted" else "Changes Requested"
+                if decision == "Accepted" and check.get("frequency") in {"Monthly", "Quarterly"}:
+                    next_due_date = _next_periodic_due_date(check.get("dueDate"), check.get("frequency"))
+                    check["status"] = "Completed"
+                    challenge.setdefault("periodicChecks", []).append({
+                        "checkId": f"CHECK-{challenge.get('challengeId')}-{len(challenge.get('periodicChecks', [])) + 1:03d}",
+                        "title": check.get("title", "Periodic progress report"),
+                        "frequency": check.get("frequency"),
+                        "dueDate": next_due_date,
+                        "notification": check.get("notification", "Please submit your periodic progress report."),
+                        "status": "Awaiting Startup Report",
+                        "createdAt": _now_iso(),
+                        "reports": [],
+                    })
+                for bucket in ("drafts", "published"):
+                    if challenge.get("id") in store.get(bucket, {}):
+                        store[bucket][challenge["id"]] = challenge
+                        break
+                _write_store(store)
+                try:
+                    save_contract_report(report)
+                except Exception:
+                    app.logger.exception("Report %s was reviewed locally but could not be updated in contract_reports.", report_id)
+                return jsonify({"ok": True, "report": report, "message": "Report review saved."})
+    return jsonify({"ok": False, "message": "Report not found."}), 404
 
 
 @app.post("/api/register")
@@ -437,6 +711,10 @@ def login():
     session.clear()
     session.permanent = True
     session["role"] = role
+    if role == "ministry":
+        session["ministry_id"] = str(data.get("ministry_id", "")).strip()
+    else:
+        session["business_id"] = str(data.get("business_id", "")).strip()
     return jsonify({"ok": True, "message": "Sign in successful.", "redirect": landing_page})
 
 
