@@ -238,6 +238,9 @@ h3 {
     background: #edf4f3;
 }
 
+.startup-card { cursor: pointer; }
+.startup-card:focus-visible { outline: 3px solid var(--orange); outline-offset: -3px; }
+
 .startup-top,
 .resource-top {
     display: flex;
@@ -298,6 +301,16 @@ h3 {
     border: 1px solid var(--ink);
     font-size: 12px;
 }
+
+.startup-dialog { width: min(720px, calc(100% - 30px)); max-height: min(760px, calc(100vh - 40px)); padding: 28px; border: 1px solid var(--line); color: var(--ink); background: var(--paper); }
+.startup-dialog::backdrop { background: rgba(16, 46, 70, .42); }
+.startup-dialog .dialog-head { align-items: flex-start; margin-bottom: 24px; }
+.startup-dialog .dialog-head h2 { margin: 10px 0 0; font-size: 38px; }
+.startup-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); }
+.startup-detail-grid > div { min-height: 78px; padding: 16px; background: #fff; }
+.startup-detail-grid .full-detail { grid-column: 1 / -1; }
+.startup-detail-grid span { display: block; margin-bottom: 8px; color: var(--muted); font: 11px 'DM Mono', monospace; text-transform: uppercase; }
+.startup-detail-grid strong { font-size: 13px; line-height: 1.5; }
 
 .timeline {
     display: grid;
