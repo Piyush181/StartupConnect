@@ -1,0 +1,6 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container application-start"><a class="back-link" href="/contracts/{{ contract.id }}">← Back to problem statement</a><div class="kicker">Application workspace</div><h1>Start your application.</h1><p>You are applying to <strong>{{ contract.title }}</strong>. The full application workflow will be connected here next.</p><div class="application-placeholder"><span class="feature-number">{{ contract.id }} · {{ contract.type }}</span><h2>Application draft ready</h2><p>Your verified startup profile will be attached to this application when the workflow is enabled.</p><a class="button outline" href="/startup-portal">Return to dashboard</a></div></main>
+<script>document.querySelector('.mobile-menu').onclick=()=>{const n=document.querySelector('.nav-links');n.style.display=n.style.display==='grid'?'':'grid'};</script>
+{% endblock %}
