@@ -20,6 +20,7 @@
         </div>
         <div class="ai-generator">
             <textarea id="ai-draft-input" rows="4" placeholder="We need a system to help municipalities identify illegal garbage dumping using citizen reports and CCTV."></textarea>
+            <textarea id="ai-additional-requirements" rows="3" placeholder="Additional requirements (optional): low-bandwidth support, officer dashboard, Marathi and English workflows."></textarea>
             <div class="ai-generator-actions">
                 <button class="button" type="button" id="generate-ai-draft">Generate Draft</button>
                 <span class="form-message" id="ai-status" role="status" aria-live="polite"></span>
@@ -117,10 +118,6 @@
                 <fieldset class="form-section">
                     <legend>Problem Statement</legend>
                     <div class="form-grid">
-                        <div class="form-field full">
-                            <label for="problem-title">Problem Title</label>
-                            <input id="problem-title" name="problemTitle" placeholder="e.g. Detect and respond to illegal dumping hotspots faster">
-                        </div>
                         <div class="form-field full">
                             <label for="problem-description">Problem Description</label>
                             <textarea id="problem-description" name="problemDescription" placeholder="Describe the existing problem, current situation, and why it needs to be solved."></textarea>
@@ -508,6 +505,7 @@
     const totalWeightElement = document.getElementById('total-weight');
     const reviewOutput = document.getElementById('challenge-review-output');
     const aiInput = document.getElementById('ai-draft-input');
+    const aiAdditionalRequirements = document.getElementById('ai-additional-requirements');
     const pathParts = new URLSearchParams(window.location.search);
     const storedKey = 'startupconnect-challenge-draft';
     let currentStep = 1;
@@ -688,6 +686,17 @@
         updateWeightSummary();
     }
 
+    function templateGroupForState(state) {
+        if ((state.categoryList || []).includes('AI / ML') || state.category === 'AI / ML') {
+            return 'ai';
+        }
+        return templateMap[state.challengeType] || 'software';
+    }
+
+    function readNestedValue(object, path) {
+        return path.split('.').reduce((value, key) => value && value[key], object);
+    }
+
     function setFromState() {
         document.getElementById('challenge-title').value = challengeState.title || '';
         document.getElementById('challenge-id').value = challengeState.challengeId || 'GOV-2026-00001';
@@ -696,7 +705,6 @@
         document.getElementById('state-select').value = fixedGovernmentIdentity.state;
         document.getElementById('challenge-type').value = challengeState.challengeType || 'Software';
         document.getElementById('difficulty').value = challengeState.difficulty || 'Intermediate';
-        document.getElementById('problem-title').value = challengeState.problemStatement?.title || '';
         document.getElementById('problem-description').value = challengeState.problemStatement?.description || '';
         document.getElementById('current-situation').value = challengeState.problemStatement?.currentSituation || '';
         document.getElementById('problem-impact').value = challengeState.problemStatement?.impact || '';
@@ -728,9 +736,12 @@
             input.checked = (challengeState.categoryList || []).includes(input.value) || (challengeState.category || '').includes(input.value) || false;
         });
 
-        const templateGroup = templateMap[challengeState.challengeType] || 'software';
+        const templateGroup = templateGroupForState(challengeState);
         document.querySelectorAll('.template-panel').forEach(panel => {
             panel.hidden = panel.dataset.templateGroup !== templateGroup;
+        });
+        document.querySelectorAll(`.template-panel[data-template-group="${templateGroup}"] input, .template-panel[data-template-group="${templateGroup}"] textarea`).forEach(field => {
+            if (field.name) field.value = readNestedValue(challengeState.templateSpecific || {}, field.name.replace('templateSpecific.', '')) || '';
         });
 
         renderDynamicList('pain-point-list', challengeState.problemStatement?.painPoints || [''], 'pain');
@@ -971,7 +982,6 @@
         });
 
         challengeState.problemStatement = {
-            title: document.getElementById('problem-title').value.trim(),
             description: document.getElementById('problem-description').value.trim(),
             currentSituation: document.getElementById('current-situation').value.trim(),
             painPoints: [...document.querySelectorAll('#pain-point-list input')].map(element => element.value.trim()).filter(Boolean),
@@ -996,7 +1006,7 @@
             })).filter(feature => feature.name)
         };
 
-        const templateGroup = templateMap[challengeState.challengeType] || 'software';
+        const templateGroup = templateGroupForState(challengeState);
         challengeState.templateSpecific = {};
         const templateFields = document.querySelectorAll(`.template-panel[data-template-group="${templateGroup}"] input, .template-panel[data-template-group="${templateGroup}"] textarea`);
         templateFields.forEach(field => {
@@ -1087,7 +1097,6 @@
             </div>
             <div class="review-block">
                 <h3>Problem Statement</h3>
-                <p><strong>Problem:</strong> ${escapeHtml(state.problemStatement?.title || '')}</p>
                 <p>${escapeHtml(state.problemStatement?.description || '')}</p>
             </div>
             <div class="review-block">
@@ -1197,7 +1206,7 @@
             const response = await fetch('/api/challenges/generate-draft', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ description: raw })
+                body: JSON.stringify({ description: raw, additionalRequirements: aiAdditionalRequirements.value.trim() })
             });
             const result = await response.json();
             if (!response.ok || !result.ok) {
@@ -1282,6 +1291,15 @@
         const group = templateMap[event.target.value] || 'software';
         document.querySelectorAll('.template-panel').forEach(panel => {
             panel.hidden = panel.dataset.templateGroup !== group;
+        });
+    });
+
+    document.querySelectorAll('input[name="categoryList"]').forEach(input => {
+        input.addEventListener('change', () => {
+            const group = [...document.querySelectorAll('input[name="categoryList"]:checked')].some(item => item.value === 'AI / ML') ? 'ai' : (templateMap[document.getElementById('challenge-type').value] || 'software');
+            document.querySelectorAll('.template-panel').forEach(panel => {
+                panel.hidden = panel.dataset.templateGroup !== group;
+            });
         });
     });
 

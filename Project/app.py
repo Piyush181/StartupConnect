@@ -13,6 +13,7 @@ from database import (
     authenticate_ministry,
     authenticate_startup,
     get_startup_profile,
+    save_challenge_contract,
     save_contract_report,
     save_startup_registration,
 )
@@ -23,6 +24,13 @@ CHALLENGE_STORE_PATH = ROOT / "challenge_store.json"
 FIXED_GOVERNMENT_BODY = "Maharashtra State Innovation Society"
 FIXED_DEPARTMENT = "Department of Skills, Employment, Entrepreneurship and Innovation"
 FIXED_STATE = "Maharashtra"
+AI_CATEGORIES = {
+    "AI / ML", "Web Development", "Mobile Application", "Data Science", "Cybersecurity",
+    "IoT", "Robotics", "Blockchain", "GIS", "FinTech", "Healthcare", "Education",
+    "Agriculture", "Environment", "Smart City", "Governance", "Other",
+}
+AI_CHALLENGE_TYPES = {"Software", "Hardware", "Hybrid", "Research", "Open Innovation"}
+AI_DIFFICULTIES = {"Beginner", "Intermediate", "Advanced", "Expert"}
 app = Flask(__name__, static_folder=str(ROOT), template_folder=str(ROOT))
 app.secret_key = os.getenv("STARTUP_CONNECT_SESSION_SECRET", "development-only-change-this-session-secret")
 app.config.update(
@@ -241,6 +249,15 @@ def _serialize_challenges():
     return sorted(challenges, key=lambda item: item.get("updatedAt", ""), reverse=True)
 
 
+def _persist_contract(challenge):
+    try:
+        save_challenge_contract(challenge, challenge.get("createdBy") or "ministry-user")
+    except (DatabaseConfigurationError, OSError):
+        app.logger.warning("Contract %s saved locally; contracts database unavailable.", challenge.get("challengeId"))
+    except Exception:
+        app.logger.exception("Contract %s could not be written to contracts.", challenge.get("challengeId"))
+
+
 def _public_challenge(challenge):
     """Return only challenge information approved for public discovery."""
     problem = challenge.get("problemStatement") or {}
@@ -330,10 +347,40 @@ def _next_periodic_due_date(due_date, frequency):
     return (current + timedelta(days=days)).strftime("%Y-%m-%d")
 
 
-def _generate_ai_draft(description):
+def _ministry_context():
+    """Return server-controlled ministry identity for draft generation."""
+    return {
+        "state": session.get("state") or FIXED_STATE,
+        "governmentBody": session.get("government_body") or FIXED_GOVERNMENT_BODY,
+        "department": session.get("department") or FIXED_DEPARTMENT,
+    }
+
+
+def _validate_ai_draft(draft):
+    """Validate the structured draft before it reaches the Create Challenge form."""
+    if not isinstance(draft, dict):
+        raise ValueError("The AI draft must be a structured object.")
+    for key in ("title", "category", "challengeType", "difficulty", "problemStatement", "objectives", "requirements", "evaluationCriteria"):
+        if key not in draft:
+            raise ValueError(f"The AI draft is missing {key}.")
+    if draft["category"] not in AI_CATEGORIES or draft["challengeType"] not in AI_CHALLENGE_TYPES or draft["difficulty"] not in AI_DIFFICULTIES:
+        raise ValueError("The AI draft contains an unsupported challenge option.")
+    if not isinstance(draft["evaluationCriteria"], list) or not draft["evaluationCriteria"]:
+        raise ValueError("The AI draft needs evaluation criteria.")
+    total = sum(float(item.get("weight", 0) or 0) for item in draft["evaluationCriteria"] if isinstance(item, dict))
+    if round(total, 4) != 100:
+        raise ValueError("The AI draft evaluation weights must total exactly 100%.")
+    for key in ("painPoints", "affectedGroups"):
+        if not isinstance(draft["problemStatement"].get(key, []), list):
+            raise ValueError(f"The AI draft field {key} must be a list.")
+    return draft
+
+
+def _generate_ai_draft(description, additional_requirements="", ministry_context=None):
     normalized = (description or "").strip()
     if not normalized:
         raise ValueError("A brief problem description is required to generate a draft.")
+    extra = (additional_requirements or "").strip()
 
     lower = normalized.lower()
 
@@ -383,41 +430,43 @@ def _generate_ai_draft(description):
         ]
 
     title = title if title else "AI Challenge Draft"
-    return {
+    draft = {
         "title": title,
+        "challengeTitle": title,
         "challengeType": challenge_type,
         "category": category,
+        "challengeCategory": category,
         "difficulty": "Advanced",
         "problemStatement": {
-            "description": problem_description,
-            "currentSituation": f"Current teams still rely on manual review, inconsistent reporting, and fragmented workflows, which slows action across {premise}.",
+            "description": normalized,
+            "currentSituation": f"The current process for {premise} is not yet described in enough detail and should be confirmed by the Ministry officer.",
             "painPoints": [
-                "Reports and evidence are not centralized",
-                "Manual review creates delays and inconsistency",
-                "Priority issues are hard to detect early",
+                "Existing workflows may be manual or fragmented",
+                "Relevant information may be difficult to monitor consistently",
+                "The current response process needs to be confirmed by the Ministry officer",
             ],
             "affectedGroups": ["Citizens", "Local Authorities", "Government Officers"],
             "geographicScope": "Local",
-            "impact": "The lack of timely action leads to service gaps, operational inefficiency, and poorer outcomes for the public and frontline teams.",
+            "impact": "A suitable solution should improve the public-service outcome described by the Ministry officer.",
         },
         "objectives": [
             *phases,
         ],
         "expectedOutcomes": [
-            {"text": "Improved detection coverage across urban hotspots", "order": 1},
-            {"text": "Reduced manual review time for municipal staff", "order": 2},
-            {"text": "Faster escalation and action on illegal dumping complaints", "order": 3},
+            {"text": "Improved monitoring and decision-making for the described problem", "order": 1},
+            {"text": "A clearer and more consistent workflow for participating teams", "order": 2},
+            {"text": "Evidence of improved public-service outcomes", "order": 3},
         ],
         "requirements": {
-            "mandatory": ["Dashboard for monitoring complaints and evidence", "AI-assisted image classification workflow", "Role-based user access"],
-            "optional": ["Map-based hotspot visualization", "Citizen reporting app"],
-            "features": [{"name": "User authentication", "priority": "Mandatory"}, {"name": "Analytics dashboard", "priority": "Mandatory"}],
+            "mandatory": ["A workflow aligned to the described problem", "Role-based access for authorized users", "Evidence and progress reporting"],
+            "optional": ["Dashboard and reporting views", "Integration with relevant existing workflows"],
+            "features": [{"name": "Secure user access", "priority": "Mandatory"}, {"name": "Progress reporting", "priority": "Mandatory"}],
         },
         "constraints": {
-            "technical": ["Low bandwidth support required", "Existing government system integration required"],
-            "budget": {"estimatedBudget": "INR 8-15 lakh", "budgetType": "Flexible"},
-            "deployment": "Government Cloud",
-            "security": ["Encryption", "Audit Logs"],
+            "technical": [],
+            "budget": {"estimatedBudget": "", "budgetType": "Not Applicable"},
+            "deployment": "No Preference",
+            "security": [],
         },
         "deliverables": ["Working Prototype", "Source Code", "Technical Documentation"],
         "platforms": ["Web", "Android"],
@@ -434,19 +483,19 @@ def _generate_ai_draft(description):
             "requiredSkills": ["AI/ML", "Python", "JavaScript", "Cloud"],
         },
         "timeline": {
-            "registrationOpen": "2026-10-05",
-            "registrationClose": "2026-10-25",
-            "submissionOpen": "2026-10-30",
-            "submissionDeadline": "2026-11-30",
-            "evaluationStart": "2026-12-01",
-            "resultsDate": "2026-12-20",
+            "registrationOpen": "",
+            "registrationClose": "",
+            "submissionOpen": "",
+            "submissionDeadline": "",
+            "evaluationStart": "",
+            "resultsDate": "",
         },
         "contact": {
-            "department": "Municipal Administration",
-            "officerName": "Rohit Sharma",
-            "designation": "Deputy Secretary",
-            "email": "rohitt@ma.gov.in",
-            "phone": "+91 98765 43210",
+            "department": "",
+            "officerName": "",
+            "designation": "",
+            "email": "",
+            "phone": "",
         },
         "status": "Draft",
         "template": "ai",
@@ -454,11 +503,20 @@ def _generate_ai_draft(description):
         "ministry": "Ministry of Housing and Urban Affairs",
         "state": "Delhi",
         "templateSpecific": {
-            "datasetAvailability": "Partially available",
-            "expectedModelOutput": "Incident classification and risk score",
-            "evaluationMetric": "Precision, recall, and F1 score",
+            "datasetAvailability": "To be provided / To be determined",
+            "expectedModelOutput": "To be specified by Ministry officer",
+            "evaluationMetric": "To be specified by Ministry officer",
         },
+        "reviewIndicators": ["AI Suggested", "Review Recommended"],
     }
+    if extra:
+        draft["requirements"]["mandatory"].append(f"Officer-provided requirement: {extra}")
+    context = ministry_context or {}
+    draft["state"] = context.get("state")
+    draft["ministry"] = context.get("governmentBody")
+    draft["governmentBody"] = context.get("governmentBody")
+    draft["department"] = context.get("department")
+    return _validate_ai_draft(draft)
 
 
 @app.get("/")
@@ -517,10 +575,11 @@ def generate_challenge_draft():
         return auth_error
     data = request.get_json(silent=True) or {}
     description = str(data.get("description") or "").strip()
+    additional_requirements = str(data.get("additionalRequirements") or "").strip()
     if not description:
         return jsonify({"ok": False, "message": "A challenge description is required."}), 400
     try:
-        draft = _generate_ai_draft(description)
+        draft = _generate_ai_draft(description, additional_requirements, _ministry_context())
         return jsonify({"ok": True, "draft": draft, "message": "AI-generated draft — Please review before publishing."})
     except ValueError as error:
         return jsonify({"ok": False, "message": str(error)}), 400
@@ -546,6 +605,11 @@ def save_challenge():
     challenge["ministry"] = FIXED_GOVERNMENT_BODY
     challenge["department"] = FIXED_DEPARTMENT
     challenge["state"] = FIXED_STATE
+    if challenge.get("status") == "Published":
+        criteria = challenge.get("evaluationCriteria") or []
+        total_weight = sum(float(item.get("weight", 0) or 0) for item in criteria if isinstance(item, dict))
+        if round(total_weight, 4) != 100:
+            return jsonify({"ok": False, "message": "Evaluation criteria weights must total exactly 100% before publishing."}), 400
     challenge_id = str(challenge.get("challengeId") or _challenge_id_for(_read_store())).strip()
     challenge["challengeId"] = challenge_id
     challenge["updatedAt"] = _now_iso()
@@ -558,6 +622,7 @@ def save_challenge():
     if bucket == "drafts" and challenge.get("status") == "Published":
         store["drafts"].pop(challenge["id"], None)
     _write_store(store)
+    _persist_contract(challenge)
     return jsonify({"ok": True, "challenge": challenge, "message": "Challenge saved successfully."})
 
 
