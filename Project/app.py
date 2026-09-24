@@ -242,6 +242,76 @@ def _serialize_challenges():
     return sorted(challenges, key=lambda item: item.get("updatedAt", ""), reverse=True)
 
 
+def _public_challenge(challenge):
+    """Return only challenge information approved for public discovery."""
+    problem = challenge.get("problemStatement") or {}
+    contact = challenge.get("contact") or {}
+    timeline = challenge.get("timeline") or {}
+    resources = challenge.get("resources") or {}
+    objectives = challenge.get("objectives") or {}
+    if isinstance(objectives, list):
+        objectives = {"primary": objectives[0] if objectives else "", "secondary": objectives[1:]}
+    engagement = challenge.get("startupEngagement") or {}
+    try:
+        bids_received = int(engagement.get("bidsReceived", 0) or 0)
+    except (TypeError, ValueError):
+        bids_received = 0
+    return {
+        "challengeId": challenge.get("challengeId"),
+        "title": challenge.get("title"),
+        "status": challenge.get("status"),
+        "category": challenge.get("category"),
+        "categoryList": challenge.get("categoryList", []),
+        "challengeType": challenge.get("challengeType"),
+        "difficulty": challenge.get("difficulty"),
+        "government": {
+            "body": challenge.get("ministry"),
+            "department": challenge.get("department"),
+            "state": challenge.get("state"),
+            "publicDepartment": contact.get("publicDepartment") or challenge.get("department"),
+            "nodalOfficerName": contact.get("nodalOfficerName"),
+            "designation": contact.get("designation"),
+            "officialEmail": contact.get("officialEmail"),
+            "officialPhone": contact.get("officialPhone"),
+        },
+        "problemStatement": {
+            "title": problem.get("title"),
+            "description": problem.get("description"),
+            "currentSituation": problem.get("currentSituation"),
+            "painPoints": problem.get("painPoints", []),
+            "affectedGroups": problem.get("affectedGroups", []),
+            "geographicScope": problem.get("geographicScope"),
+            "impact": problem.get("impact"),
+        },
+        "objectives": objectives,
+        "expectedOutcomes": challenge.get("expectedOutcomes", []),
+        "requirements": challenge.get("requirements", {}),
+        "deliverables": challenge.get("deliverables", []),
+        "platforms": challenge.get("platforms", []),
+        "evaluationCriteria": challenge.get("evaluationCriteria", []),
+        "eligibility": challenge.get("eligibility", {}),
+        "timeline": timeline,
+        "resources": {
+            "dataProvided": resources.get("dataProvided"),
+            "datasetType": resources.get("datasetType", []),
+            "datasetSize": resources.get("datasetSize"),
+            "dataAccess": resources.get("dataAccess"),
+            "apis": [{"name": api.get("name"), "purpose": api.get("purpose"), "endpoint": api.get("endpoint")} for api in resources.get("apis", [])],
+        },
+        "startupEngagement": {
+            "bidsReceived": max(bids_received, len(engagement.get("startups", []))),
+            "startups": [{
+                "name": item.get("name"),
+                "stage": item.get("stage"),
+                "evaluationStatus": item.get("evaluationStatus"),
+                "performanceStatus": item.get("performanceStatus"),
+                "deadline": item.get("deadline"),
+                "publicNote": item.get("publicNote"),
+            } for item in engagement.get("startups", [])],
+        },
+    }
+
+
 def _find_periodic_check(store, check_id):
     for challenge in _serialize_challenges():
         for check in challenge.get("periodicChecks", []):
@@ -413,7 +483,7 @@ def pages_stylesheet():
 
 @app.get("/<page>")
 def page(page):
-    pages = {"directory", "how-it-works", "resources", "login", "join", "register", "government-dashboard", "create-challenge"}
+    pages = {"directory", "how-it-works", "login", "join", "register", "government-dashboard", "create-challenge", "public-challenges"}
     if page in pages:
         return render_template(f"{page}.htm")
     return ("Page not found", 404)
@@ -423,7 +493,19 @@ def page(page):
 def challenges():
     if session.get("role") == "ministry":
         return redirect("/government-dashboard")
-    return redirect("/#challenges")
+    return redirect("/public-challenges")
+
+
+@app.get("/public-challenges")
+def public_challenges():
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "Published"]
+    return render_template("public-challenges.htm", challenges=challenges)
+
+
+@app.get("/api/public/challenges")
+def public_challenges_api():
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "Published"]
+    return jsonify({"ok": True, "challenges": challenges})
 
 
 @app.get("/government-dashboard")
@@ -568,6 +650,55 @@ def schedule_periodic_check(challenge_id):
     _write_store(store)
     _persist_contract(challenge)
     return jsonify({"ok": True, "check": check, "message": "Periodic check scheduled and startup notification queued."})
+
+
+@app.post("/api/challenges/<challenge_id>/startup-progress")
+def update_startup_progress(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    data = request.get_json(silent=True) or {}
+    startup_name = str(data.get("name") or "").strip()
+    if not startup_name:
+        return jsonify({"ok": False, "message": "A public startup name is required."}), 400
+    stage = str(data.get("stage") or "Bid Received").strip()
+    allowed_stages = {"Bid Received", "Under Evaluation", "Evaluation Completed", "Performing"}
+    if stage not in allowed_stages:
+        return jsonify({"ok": False, "message": "Choose a valid startup progress stage."}), 400
+    try:
+        bids_received = int(data.get("bidsReceived") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Total bids received must be a number."}), 400
+    if bids_received < 0:
+        return jsonify({"ok": False, "message": "Total bids received cannot be negative."}), 400
+
+    store = _read_store()
+    challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    engagement = challenge.setdefault("startupEngagement", {"bidsReceived": 0, "startups": []})
+    startups = engagement.setdefault("startups", [])
+    startup = next((item for item in startups if item.get("name", "").casefold() == startup_name.casefold()), None)
+    if startup is None:
+        startup = {"name": startup_name}
+        startups.append(startup)
+    startup.update({
+        "stage": stage,
+        "evaluationStatus": str(data.get("evaluationStatus") or ("Completed" if stage in {"Evaluation Completed", "Performing"} else "Pending")).strip(),
+        "performanceStatus": str(data.get("performanceStatus") or ("Active" if stage == "Performing" else "Not started")).strip(),
+        "deadline": str(data.get("deadline") or "").strip(),
+        "publicNote": str(data.get("publicNote") or "").strip(),
+        "updatedAt": _now_iso(),
+    })
+    engagement["bidsReceived"] = max(bids_received, len(startups))
+    challenge["updatedAt"] = _now_iso()
+    for bucket in ("drafts", "published"):
+        if challenge.get("id") in store.get(bucket, {}):
+            store[bucket][challenge["id"]] = challenge
+            break
+    _write_store(store)
+    _persist_contract(challenge)
+    return jsonify({"ok": True, "startupEngagement": engagement, "message": "Public startup progress updated."})
 
 
 @app.get("/api/periodic-checks")
