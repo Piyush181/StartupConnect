@@ -156,20 +156,6 @@
         </div>
         <p class="evaluation-total">Calculated total: {{ '%.2f' | format(evaluation.total_score) }} / {{ '%.2f' | format(evaluation.maximum_total_score) }}</p>
     </section>
-    {% elif application.status == 'selected' and final_selection %}
-    <section class="challenge-panel">
-        <div class="panel-head"><h2>Final government selection</h2><span class="status-badge published">Selected</span></div>
-        <p>{{ final_selection.reason }}</p>
-        <p class="form-note">Confirmed by {{ final_selection.decision_maker }} ({{ final_selection.decision_role }}) · {{ final_selection.confirmed_at }}</p>
-        <p>Selected — Proceed to Pilot Agreement</p>
-    </section>
-    {% elif application.status == 'not_selected' and final_selection %}
-    <section class="challenge-panel">
-        <div class="panel-head"><h2>Final government selection</h2><span class="status-badge closed">Not Selected</span></div>
-        <p>{{ final_selection.reason }}</p>
-        <p>{{ final_selection.comments }}</p>
-        <p class="form-note">Decision by {{ final_selection.decision_maker }} ({{ final_selection.decision_role }}) · {{ final_selection.decided_at }}</p>
-    </section>
     {% elif application.status == 'shortlisted' %}
     <section class="challenge-panel">
         <div class="panel-head"><h2>Shortlist decision</h2><span class="status-badge published">Shortlisted</span></div>

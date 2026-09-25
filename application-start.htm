@@ -39,6 +39,18 @@
     {% if closed and not application %}
     <p class="application-notice">This challenge is not accepting new applications.</p>
     {% else %}
+    {% if clarification and clarification_requirements %}
+    <section class="application-form-section clarification-response" aria-labelledby="clarification-request-title">
+        <span class="section-label">Government review</span>
+        <h2 id="clarification-request-title">Clarification requested</h2>
+        {% for item in clarification_requirements %}
+        <article class="screening-requirement">
+            <h3>{{ item.requirement }}</h3>
+            <p>{{ item.comment or 'Please provide additional information for this eligibility requirement.' }}</p>
+        </article>
+        {% endfor %}
+    </section>
+    {% endif %}
     <form class="application-form" data-application-form data-challenge-id="{{ contract.id }}" data-submitted="{{ 'true' if submitted else 'false' }}">
         <section class="application-form-section">
             <span class="section-label">01 · Problem understanding</span>
