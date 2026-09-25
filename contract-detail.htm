@@ -1,0 +1,41 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="contract-detail container">
+    <a class="back-link" href="/startup-portal">← Back to dashboard</a>
+    <section class="contract-detail-heading">
+        <div>
+            <div class="kicker">Problem statement · {{ contract.id }}</div>
+            <h1>{{ contract.title }}</h1>
+            <p class="contract-ministry">Submitted by {{ contract.ministry }} · {{ contract.sub_ministry }}</p>
+        </div>
+        <div class="contract-application-box"><span>{{ contract.applications }} submitted applications</span>{% if
+            session.get('role') == 'startup' %}<a class="button" href="/contracts/{{ contract.id }}/apply">Start
+                application</a>{% endif %}</div>
+    </section>
+    <section class="contract-overview">
+        <article><span>Application deadline</span><strong>{{ contract.application_deadline }}</strong></article>
+        <article><span>Delivery deadline</span><strong>{{ contract.deadline }}</strong></article>
+        <article><span>Allocated budget</span><strong>{{ contract.budget }}</strong></article>
+        <article><span>Contract type</span><strong>{{ contract.type }}</strong></article>
+    </section>
+    <div class="contract-detail-grid">
+        <section class="contract-panel">
+            <div class="section-label">The need</div>
+            <h2>Description</h2>
+            <p>{{ contract.description }}</p>
+            <div class="section-label detail-label">Expected timeline and milestones</div>
+            <p>{{ contract.timeline }}</p>
+            <ol class="milestone-list">{% for milestone in contract.milestones %}<li>{{ milestone }}</li>{% endfor %}
+            </ol>
+        </section>
+        <section class="contract-panel">
+            <div class="section-label">What good looks like</div>
+            <h2>Solution parameters</h2>
+            <ul class="parameter-list">{% for parameter in contract.solution_parameters %}<li>{{ parameter }}</li>{%
+                endfor %}</ul>
+        </section>
+    </div>
+</main>
+<script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };</script>
+{% endblock %}

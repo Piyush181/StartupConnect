@@ -1,0 +1,97 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="public-challenges-shell">
+    <section class="container page-hero public-challenges-hero">
+        <div class="kicker">Open government opportunities</div>
+        <h1>Public challenges</h1>
+        <p>Explore published problems from government departments and find the context, outcomes, eligibility and timelines your startup needs to respond.</p>
+        <div class="public-view-note">Public view: internal administrative contacts, private reports, creator IDs and unpublished details are not shown.</div>
+    </section>
+
+    <section class="container page-content">
+        {% if challenges %}
+        <div class="public-challenge-list">
+            {% for challenge in challenges %}
+            <article class="public-challenge-card">
+                <div class="public-challenge-card-head">
+                    <div>
+                        <span class="challenge-id">{{ challenge.challengeId }}</span>
+                        <h2>{{ challenge.title or 'Untitled challenge' }}</h2>
+                        <div class="challenge-meta">
+                            <span>{{ challenge.category or 'General' }}</span>
+                            <span>{{ challenge.challengeType or 'Open innovation' }}</span>
+                            <span>{{ challenge.difficulty or 'All levels' }}</span>
+                        </div>
+                    </div>
+                    <span class="status-badge published">{{ challenge.status }}</span>
+                </div>
+
+                <div class="public-government-strip">
+                    <div><span>Government body</span><strong>{{ challenge.government.body }}</strong></div>
+                    <div><span>Department</span><strong>{{ challenge.government.department }}</strong></div>
+                    <div><span>State</span><strong>{{ challenge.government.state }}</strong></div>
+                </div>
+
+                <div class="startup-engagement-strip">
+                    <div><span>Startup bids</span><strong>{{ challenge.startupEngagement.bidsReceived }}</strong></div>
+                    <div><span>Evaluation completed</span><strong>{{ challenge.startupEngagement.startups | selectattr('evaluationStatus', 'equalto', 'Completed') | list | length }}</strong></div>
+                    <div><span>Currently performing</span><strong>{{ challenge.startupEngagement.startups | selectattr('stage', 'equalto', 'Performing') | list | length }}</strong></div>
+                </div>
+                {% if challenge.startupEngagement.startups %}
+                <div class="public-startup-list">
+                    <span class="section-tag">STARTUPS WORKING ON THIS CHALLENGE</span>
+                    {% for startup in challenge.startupEngagement.startups %}
+                    <div class="public-startup-row">
+                        <strong>{{ startup.name }}</strong>
+                        <span>{{ startup.stage }}</span>
+                        <span>{{ startup.evaluationStatus }}</span>
+                        <span>{{ startup.performanceStatus }}</span>
+                        <span>{% if startup.deadline %}Deadline: {{ startup.deadline }}{% else %}Deadline to be announced{% endif %}</span>
+                    </div>
+                    {% if startup.publicNote %}<p class="public-startup-note">{{ startup.publicNote }}</p>{% endif %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="public-startup-list"><span class="section-tag">STARTUP PARTICIPATION</span><p>No startup has been publicly marked as working on this challenge yet.</p></div>
+                {% endif %}
+
+                <div class="public-challenge-summary">
+                    <div>
+                        <span class="section-tag">THE PROBLEM</span>
+                        <p>{{ challenge.problemStatement.description or 'The government has published a problem statement for startup and innovation teams.' }}</p>
+                    </div>
+                    <div>
+                        <span class="section-tag">PUBLIC IMPACT</span>
+                        <p>{{ challenge.problemStatement.impact or 'See the full challenge details for expected public outcomes.' }}</p>
+                    </div>
+                </div>
+
+                <details class="public-challenge-details">
+                    <summary>View full challenge details</summary>
+                    <div class="public-detail-grid">
+                        <section><h3>Problem context</h3><p>{{ challenge.problemStatement.currentSituation }}</p><ul>{% for item in challenge.problemStatement.painPoints %}<li>{{ item }}</li>{% endfor %}</ul></section>
+                        <section><h3>Objectives</h3><ul>{% for item in challenge.objectives.secondary if item %}<li>{{ item }}</li>{% endfor %}{% if challenge.objectives.primary %}<li>{{ challenge.objectives.primary }}</li>{% endif %}</ul></section>
+                        <section><h3>Expected outcomes</h3><ul>{% for item in challenge.expectedOutcomes %}<li>{{ item.text if item is mapping else item }}</li>{% endfor %}</ul></section>
+                        <section><h3>Requirements</h3><ul>{% for item in challenge.requirements.mandatory %}<li>{{ item }}</li>{% endfor %}{% for item in challenge.requirements.optional %}<li class="muted-item">Optional: {{ item }}</li>{% endfor %}</ul></section>
+                        <section><h3>Deliverables and platforms</h3><p>{{ challenge.deliverables | join(', ') }}</p><p>{{ challenge.platforms | join(', ') }}</p></section>
+                        <section><h3>Evaluation</h3><ul>{% for item in challenge.evaluationCriteria %}<li>{{ item.criterion }}: {{ item.weight }}%</li>{% endfor %}</ul></section>
+                        <section><h3>Who can apply</h3><p>{{ challenge.eligibility.participantTypes | join(', ') }}</p><p>Team size: {{ challenge.eligibility.minTeamSize }}-{{ challenge.eligibility.maxTeamSize }}</p><p>Skills: {{ challenge.eligibility.requiredSkills | join(', ') }}</p></section>
+                        <section><h3>Data and resources</h3><p>{{ challenge.resources.dataProvided }}{% if challenge.resources.datasetType %} · {{ challenge.resources.datasetType | join(', ') }}{% endif %}</p><p>Access: {{ challenge.resources.dataAccess }}</p></section>
+                        <section><h3>Timeline</h3><p>Registration: {{ challenge.timeline.registrationOpen or 'To be announced' }} to {{ challenge.timeline.registrationClose or 'To be announced' }}</p><p>Submission: {{ challenge.timeline.submissionOpen or 'To be announced' }} to {{ challenge.timeline.submissionDeadline or 'To be announced' }}</p><p>Results: {{ challenge.timeline.resultsDate or 'To be announced' }}</p></section>
+                        <section><h3>Public contact</h3><p>{{ challenge.government.nodalOfficerName or 'Nodal officer details available after sign-in' }}</p><p>{{ challenge.government.designation }}</p><p>{{ challenge.government.officialEmail }}</p><p>{{ challenge.government.officialPhone }}</p></section>
+                    </div>
+                </details>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state public-empty-state">
+            <h2>No published challenges yet</h2>
+            <p>Government challenges will appear here once they are reviewed and published.</p>
+            <a class="button" href="/join">Join the network</a>
+        </div>
+        {% endif %}
+    </section>
+</main>
+{% endblock %}

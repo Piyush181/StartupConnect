@@ -1,0 +1,79 @@
+{% extends "base.htm" %}
+
+{% block content %}
+    <main>
+        <section class="container page-hero">
+            <div class="kicker">The people behind the possibility</div>
+            <h1>Startups building for public good.</h1>
+            <p>Meet the founders and teams turning Maharashtra's hardest challenges into practical, measurable
+                solutions.</p>
+        </section>
+        <section class="container page-content">
+            <div class="section-label">{{ startups | length }} startups in the network · 42 departments served</div>
+            <div class="directory-grid">
+                {% if database_error %}
+                <div class="empty-state"><p>{{ database_error }}</p></div>
+                {% elif startups %}
+                {% for startup in startups %}
+                <article class="startup startup-card" data-dialog="startup-detail-{{ loop.index }}" tabindex="0" role="button" aria-label="View details for {{ startup.business_name }}">
+                    <div class="startup-top"><span>{{ '%02d' | format(loop.index) }} / {{ startup.sector or 'General' }}</span><span>{{ startup.city }}</span></div>
+                    <h3>{{ startup.business_name }}</h3>
+                    <p>{{ startup.domain or 'Startup capability profile available through the network.' }}</p><span class="tag">{{ startup.current_stage or startup.business_type }}</span>
+                </article>
+                <dialog class="startup-dialog" id="startup-detail-{{ loop.index }}">
+                    <div class="dialog-head"><div><div class="kicker">Startup profile</div><h2>{{ startup.business_name }}</h2></div><button class="dialog-close" type="button" aria-label="Close startup details">×</button></div>
+                    <div class="startup-detail-grid">
+                        <div><span>Business type</span><strong>{{ startup.business_type }}</strong></div>
+                        <div><span>Sector</span><strong>{{ startup.sector }}</strong></div>
+                        <div><span>Current stage</span><strong>{{ startup.current_stage }}</strong></div>
+                        <div><span>Employees</span><strong>{{ startup.employee_count }}</strong></div>
+                        <div><span>Incorporated</span><strong>{{ startup.incorporation_date }}</strong></div>
+                        <div><span>GST state</span><strong>{{ startup.gst_state }}</strong></div>
+                        <div class="full-detail"><span>Products and services</span><strong>{{ startup.domain }}</strong></div>
+                        <div class="full-detail"><span>Ownership</span><strong>{{ startup.ownership_details }}</strong></div>
+                        <div class="full-detail"><span>Address</span><strong>{{ startup.company_address }} · {{ startup.pincode }}</strong></div>
+                        <div><span>Email</span><strong>{{ startup.company_email }}</strong></div>
+                        <div><span>Phone</span><strong>{{ startup.company_phone }}</strong></div>
+                        <div class="full-detail"><span>Website</span><strong>{{ startup.website or 'Not provided' }}</strong></div>
+                    </div>
+                </dialog>
+                {% endfor %}
+                {% else %}
+                <div class="empty-state"><p>No startup registrations are available yet.</p></div>
+                {% endif %}
+            </div>
+        </section>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-top">
+                <div><a class="brand" href="/"><span class="brand-mark">↯</span>Startup Connect India</a>
+                    <p>The trusted bridge between public challenges and startup capability.</p>
+                </div>
+                <div class="footer-links">
+                    <div>
+                        <h4>Platform</h4><a href="/challenges">Open challenges</a><a href="/directory">Startup
+                            directory</a><a href="/public-challenges">Public challenges</a>
+                    </div>
+                    <div>
+                        <h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a
+                            href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+        </div>
+    </footer>
+    <script>
+        document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };
+        document.querySelectorAll('.startup-card').forEach(card => {
+            const open = () => document.getElementById(card.dataset.dialog).showModal();
+            card.onclick = open;
+            card.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); } };
+        });
+        document.querySelectorAll('.startup-dialog').forEach(dialog => {
+            dialog.querySelector('.dialog-close').onclick = () => dialog.close();
+            dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+        });
+    </script>
+{% endblock %}
