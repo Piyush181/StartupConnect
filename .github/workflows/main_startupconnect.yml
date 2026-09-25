@@ -22,7 +22,11 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
+<<<<<<< HEAD
           python-version: '3.14'
+=======
+          python-version: '3.13'
+>>>>>>> 27c8cdb (Add or update the Azure App Service build and deployment workflow config)
 
       # 🛠️ Local Build Section (Optional)
       # The following section in your workflow is designed to catch build issues early on the client side, before deployment. This can be helpful for debugging and validation. However, if this step significantly increases deployment time and early detection is not critical for your workflow, you may remove this section to streamline the deployment process.
@@ -50,15 +54,20 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
+<<<<<<< HEAD
     permissions:
       id-token: write #This is required for requesting the JWT
       contents: read #This is required for actions/checkout
 
+=======
+    
+>>>>>>> 27c8cdb (Add or update the Azure App Service build and deployment workflow config)
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: python-app
+<<<<<<< HEAD
       
       - name: Login to Azure
         uses: azure/login@v2
@@ -67,10 +76,17 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_BF8711F808554EB48622C5600D91EC83 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_44E93A6241474FBFBE4D2083754C82EB }}
 
+=======
+      
+>>>>>>> 27c8cdb (Add or update the Azure App Service build and deployment workflow config)
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
           app-name: 'StartupConnect'
           slot-name: 'Production'
+<<<<<<< HEAD
           
+=======
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_14DEB53CE5D94EF5AF6625CBC181E4C6 }}
+>>>>>>> 27c8cdb (Add or update the Azure App Service build and deployment workflow config)
