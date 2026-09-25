@@ -1,0 +1,88 @@
+{% extends "base.htm" %}
+
+{% block content %}
+    <main>
+        <section class="container page-hero">
+            <div class="kicker">A clear path from need to scale</div>
+            <h1>One mechanism. Better public outcomes.</h1>
+            <p>We make innovation procurement easier to understand, easier to trust and easier to move forward.</p>
+        </section>
+        <section class="container page-content">
+            <div class="section-label">The nine-stage pathway</div>
+            <div class="timeline">
+                <article class="phase"><span class="phase-number">01 / DEFINE</span>
+                    <h3>Departments frame the need.</h3>
+                    <p>Clear problem statements describe the outcome, context and constraints without prescribing a
+                        solution.</p>
+                </article>
+                <article class="phase"><span class="phase-number">02 / TEST</span>
+                    <h3>Startups prove the fit.</h3>
+                    <p>Teams apply against a transparent brief and show the evidence behind their approach.</p>
+                </article>
+                <article class="phase"><span class="phase-number">03 / SCALE</span>
+                    <h3>Everyone learns from the pilot.</h3>
+                    <p>Milestones and measurement turn a promising experiment into a procurement-ready pathway.</p>
+                </article>
+            </div>
+            <div class="full-steps">
+                <article class="full-step"><b>01</b>
+                    <h3>Government identifies &amp; posts a challenge</h3>
+                    <p>A ministry or department identifies a real public problem and publishes the outcome, context, constraints, eligibility requirements and timeline.</p>
+                </article>
+                <article class="full-step"><b>02</b>
+                    <h3>Startups discover &amp; assess the challenge</h3>
+                    <p>Startups browse challenges and assess whether the problem matches their capabilities, sector and delivery capacity.</p>
+                </article>
+                <article class="full-step"><b>03</b>
+                    <h3>Startups apply with their solution</h3>
+                    <p>Eligible startups submit their proposed solution, team details, evidence, implementation approach and required documents.</p>
+                </article>
+                <article class="full-step"><b>04</b>
+                    <h3>Government screens &amp; evaluates applications</h3>
+                    <p>The department checks eligibility and evaluates submissions using the published evaluation criteria and scorecard. Shortlisted startups are selected for a pilot.</p>
+                </article>
+                <article class="full-step"><b>05</b>
+                    <h3>Pilot agreement is created &amp; approved</h3>
+                    <p>The government and selected startup agree on the pilot scope, duration, milestones, deliverables, success measures, payment milestones, data and IP responsibilities, cybersecurity requirements, risks and responsibilities before the pilot begins.</p>
+                </article>
+                <article class="full-step"><b>06</b>
+                    <h3>Sandbox / pilot is conducted</h3>
+                    <p>The selected startup deploys and tests its solution in the agreed controlled environment or live setting according to the approved pilot agreement.</p>
+                </article>
+                <article class="full-step"><b>07</b>
+                    <h3>Monitoring, reporting &amp; milestone verification</h3>
+                    <p>Government officers conduct periodic checks while startups submit progress updates, completed work, metrics, evidence and blockers. Milestones are verified against the pilot agreement.</p>
+                </article>
+                <article class="full-step"><b>08</b>
+                    <h3>Evaluation, validation &amp; payment</h3>
+                    <p>The evaluation board reviews the pilot results and evidence against the agreed scorecard. Once applicable milestones are verified, the corresponding milestone or pilot payment is released.</p>
+                </article>
+                <article class="full-step"><b>09</b>
+                    <h3>Scale, procure, iterate or close</h3>
+                    <p>Based on validated results, the government decides whether to iterate or extend the pilot, scale the solution, move toward compliant procurement, or responsibly close the pilot.</p>
+                </article>
+            </div>
+        </section>
+    </main>
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-top">
+                <div><a class="brand" href="/"><span class="brand-mark">↯</span>Startup Connect India</a>
+                    <p>The trusted bridge between public challenges and startup capability.</p>
+                </div>
+                <div class="footer-links">
+                    <div>
+                        <h4>Platform</h4><a href="/challenges">Open challenges</a><a href="/directory">Startup
+                            directory</a><a href="/public-challenges">Public challenges</a>
+                    </div>
+                    <div>
+                        <h4>Support</h4><a href="mailto:hello@startupconnect.in">Contact support</a><a
+                            href="/how-it-works">FAQ</a><a href="/how-it-works">About the mechanism</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">© 2026 Startup Connect India · SIH PS 26136 · Accessibility · Privacy · RTI</div>
+        </div>
+    </footer>
+    <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };</script>
+{% endblock %}
