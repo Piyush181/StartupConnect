@@ -16,10 +16,9 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # Replace these values manually, or set the matching environment variables.
 MYSQL_CONFIG = {
     "host": os.getenv("STARTUP_CONNECT_DB_HOST", "localhost"),
-    "port": int(os.getenv("STARTUP_CONNECT_DB_PORT", "3306")),
     "user": os.getenv("STARTUP_CONNECT_DB_USER", "root"),
     "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "apIEHewSeq8"),
-    "database": "startupconnect",
+    "database": "startupconnect"
 }
 
 # Generate once with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
