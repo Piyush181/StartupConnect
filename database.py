@@ -6,12 +6,10 @@ encryption key outside source control and use the same key for future reads.
 
 import json
 import os
-import uuid
 from typing import Any, Mapping, cast
 
 import mysql.connector
 from cryptography.fernet import Fernet
-from mysql.connector.errors import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 
@@ -19,7 +17,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 MYSQL_CONFIG = {
     "host": os.getenv("STARTUP_CONNECT_DB_HOST", "localhost"),
     "user": os.getenv("STARTUP_CONNECT_DB_USER", "root"),
-    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "Soham@14"),
+    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "apIEHewSeq8"),
     "database": "startupconnect"
 }
 
@@ -107,27 +105,6 @@ CREATE TABLE IF NOT EXISTS contract_reports (
     INDEX idx_contract_reports_status (status)
 )
 """
-
-APPLICATIONS_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS applications (
-    application_id VARCHAR(80) NOT NULL PRIMARY KEY,
-    challenge_id VARCHAR(100) NOT NULL,
-    business_id_encrypted TEXT NOT NULL,
-    business_id_hash CHAR(64) NOT NULL,
-    status VARCHAR(40) NOT NULL,
-    application_data LONGTEXT NOT NULL,
-    submitted_at TIMESTAMP NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_applications_challenge_business (challenge_id, business_id_hash),
-    INDEX idx_applications_challenge (challenge_id),
-    INDEX idx_applications_business (business_id_hash),
-    INDEX idx_applications_status (status)
-)
-"""
-
-
-class DuplicateApplicationError(Exception):
-    """Raised when a startup attempts to modify an already-submitted application."""
 
 
 def _cipher() -> Fernet:
@@ -346,195 +323,6 @@ def save_contract_report(report: Mapping[str, Any]) -> None:
             ),
         )
         connection.commit()
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def _application_from_row(row: tuple[Any, ...]) -> dict[str, Any]:
-    cipher = _cipher()
-    application_data = row[4]
-    try:
-        application_data = json.loads(application_data)
-    except (TypeError, json.JSONDecodeError):
-        application_data = {}
-    return {
-        "application_id": row[0],
-        "challenge_id": row[1],
-        "business_id": cipher.decrypt(row[2].encode()).decode(),
-        "status": row[3],
-        "application_data": application_data,
-        "submitted_at": row[5].isoformat() if row[5] else None,
-        "updated_at": row[6].isoformat() if row[6] else None,
-    }
-
-
-def save_application(
-    challenge_id: str,
-    business_id: str,
-    application_data: Mapping[str, Any],
-    status: str,
-) -> dict[str, Any]:
-    """Create an application or update its draft for the authenticated startup."""
-    if status not in {"draft", "submitted"}:
-        raise ValueError("Application status must be draft or submitted.")
-    cipher = _cipher()
-    business_hash = _lookup_hash(business_id)
-    connection = _open_connection()
-    cursor = connection.cursor()
-    try:
-        cursor.execute(APPLICATIONS_SCHEMA_SQL)
-        cursor.execute(
-            "SELECT application_id, status FROM applications WHERE challenge_id = %s AND business_id_hash = %s",
-            (challenge_id, business_hash),
-        )
-        existing = cursor.fetchone()
-        if existing:
-            application_id, existing_status = existing
-            if existing_status != "draft" and not (existing_status == "clarification_requested" and status == "submitted"):
-                raise DuplicateApplicationError
-            cursor.execute(
-                """UPDATE applications SET application_data = %s, status = %s,
-                   submitted_at = CASE WHEN %s = 'submitted' AND submitted_at IS NULL THEN CURRENT_TIMESTAMP ELSE submitted_at END,
-                   updated_at = CURRENT_TIMESTAMP
-                   WHERE application_id = %s AND business_id_hash = %s AND status = %s""",
-                (json.dumps(dict(application_data), ensure_ascii=True), status, status, application_id, business_hash, existing_status),
-            )
-        else:
-            application_id = f"APP-{uuid.uuid4()}"
-            cursor.execute(
-                """INSERT INTO applications (
-                   application_id, challenge_id, business_id_encrypted, business_id_hash,
-                   status, application_data, submitted_at
-                   ) VALUES (%s, %s, %s, %s, %s, %s,
-                   CASE WHEN %s = 'submitted' THEN CURRENT_TIMESTAMP ELSE NULL END)""",
-                (
-                    application_id,
-                    challenge_id,
-                    _encrypted(cipher, business_id),
-                    business_hash,
-                    status,
-                    json.dumps(dict(application_data), ensure_ascii=True),
-                    status,
-                ),
-            )
-        connection.commit()
-        cursor.execute(
-            """SELECT application_id, challenge_id, business_id_encrypted, status,
-                      application_data, submitted_at, updated_at
-               FROM applications WHERE application_id = %s AND business_id_hash = %s""",
-            (application_id, business_hash),
-        )
-        row = cast(tuple[Any, ...] | None, cursor.fetchone())
-        if row is None:
-            raise RuntimeError("Saved application could not be loaded.")
-        return _application_from_row(row)
-    except IntegrityError as error:
-        connection.rollback()
-        if getattr(error, "errno", None) == 1062:
-            raise DuplicateApplicationError from error
-        raise
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def get_application(application_id: str, business_id: str) -> dict[str, Any] | None:
-    """Load an application only when it belongs to the supplied startup."""
-    connection = _open_connection()
-    cursor = connection.cursor()
-    try:
-        cursor.execute(APPLICATIONS_SCHEMA_SQL)
-        cursor.execute(
-            """SELECT application_id, challenge_id, business_id_encrypted, status,
-                      application_data, submitted_at, updated_at
-               FROM applications WHERE application_id = %s AND business_id_hash = %s""",
-            (application_id, _lookup_hash(business_id)),
-        )
-        row = cast(tuple[Any, ...] | None, cursor.fetchone())
-        return _application_from_row(row) if row else None
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def get_startup_application(challenge_id: str, business_id: str) -> dict[str, Any] | None:
-    """Load the authenticated startup's application for one challenge."""
-    connection = _open_connection()
-    cursor = connection.cursor()
-    try:
-        cursor.execute(APPLICATIONS_SCHEMA_SQL)
-        cursor.execute(
-            """SELECT application_id, challenge_id, business_id_encrypted, status,
-                      application_data, submitted_at, updated_at
-               FROM applications WHERE challenge_id = %s AND business_id_hash = %s""",
-            (challenge_id, _lookup_hash(business_id)),
-        )
-        row = cast(tuple[Any, ...] | None, cursor.fetchone())
-        return _application_from_row(row) if row else None
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def list_startup_applications(business_id: str) -> list[dict[str, Any]]:
-    """Return all applications belonging to one startup, including drafts."""
-    connection = _open_connection()
-    cursor = connection.cursor()
-    try:
-        cursor.execute(APPLICATIONS_SCHEMA_SQL)
-        cursor.execute(
-            """SELECT application_id, challenge_id, business_id_encrypted, status,
-                      application_data, submitted_at, updated_at
-               FROM applications WHERE business_id_hash = %s ORDER BY updated_at DESC""",
-            (_lookup_hash(business_id),),
-        )
-        return [_application_from_row(row) for row in cast(list[tuple[Any, ...]], cursor.fetchall())]
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def count_challenge_applications(challenge_id: str) -> int:
-    """Count non-draft applications for a challenge."""
-    connection = _open_connection()
-    cursor = connection.cursor()
-    try:
-        cursor.execute(APPLICATIONS_SCHEMA_SQL)
-        cursor.execute(
-            "SELECT COUNT(*) FROM applications WHERE challenge_id = %s AND status <> 'draft'",
-            (challenge_id,),
-        )
-        row = cast(tuple[Any, ...] | None, cursor.fetchone())
-        return int(row[0]) if row else 0
-    finally:
-        cursor.close()
-        connection.close()
-
-
-def list_challenge_applications(challenge_id: str) -> list[dict[str, Any]]:
-    """Return non-draft challenge applications with public startup identity."""
-    connection = _open_connection()
-    cursor = connection.cursor()
-    try:
-        cursor.execute(APPLICATIONS_SCHEMA_SQL)
-        cursor.execute(SCHEMA_SQL)
-        cursor.execute(
-            """SELECT a.application_id, a.challenge_id, a.business_id_encrypted,
-                      a.status, a.application_data, a.submitted_at, a.updated_at,
-                      r.business_name
-               FROM applications a LEFT JOIN startup_registrations r
-                 ON r.business_id_hash = a.business_id_hash
-               WHERE a.challenge_id = %s AND a.status <> 'draft'
-               ORDER BY a.submitted_at DESC""",
-            (challenge_id,),
-        )
-        applications = []
-        for row in cast(list[tuple[Any, ...]], cursor.fetchall()):
-            application = _application_from_row(row[:7])
-            application["startup_name"] = row[7] or application["business_id"]
-            applications.append(application)
-        return applications
     finally:
         cursor.close()
         connection.close()
