@@ -18,7 +18,7 @@ MYSQL_CONFIG = {
     "host": os.getenv("STARTUP_CONNECT_DB_HOST", "localhost"),
     "port": int(os.getenv("STARTUP_CONNECT_DB_PORT", "3306")),
     "user": os.getenv("STARTUP_CONNECT_DB_USER", "root"),
-    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "Soham@14"),
+    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "apIEHewSeq8"),
     "database": "startupconnect",
 }
 

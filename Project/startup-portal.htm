@@ -56,6 +56,15 @@
                 <h2>Available contracts</h2>
             </div><button class="button outline" type="button" data-dialog="available-dialog">Sort and filter</button>
         </div>
+        {% for challenge in available_challenges %}
+        <article class="contract-list-item">
+            <div><span class="contract-code">OPEN · {{ challenge.challengeId }}</span>
+                <h3><a href="/contracts/{{ challenge.challengeId }}">{{ challenge.title }}</a></h3>
+                <p>{{ challenge.government.department or 'Government department' }} · {{ challenge.category or challenge.challengeType }}</p>
+            </div>
+            <strong>₹{{ '{:,.2f}'.format(challenge.bidStartPrice or 0) }}</strong><span>Start bidding</span><b>↗</b>
+        </article>
+        {% endfor %}
         <div class="contract-list">
             <article>
                 <div><span class="contract-code">OPEN · PS MH-038</span>

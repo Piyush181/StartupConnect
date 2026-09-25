@@ -1,6 +1,46 @@
 {% extends "base.htm" %}
 
 {% block content %}
-<main class="container profile-page"><a class="back-link" href="/startup-portal">← Back to dashboard</a><div class="profile-heading"><div><div class="kicker">Company profile</div><h1>{{ profile.business_name }}</h1><p>{{ profile.business_type }} · {{ profile.sector }} · {{ profile.current_stage }}</p></div><span class="contract-status active">Verified startup</span></div><div class="profile-grid"><section class="profile-card"><h2>Company details</h2><dl><dt>Business ID</dt><dd>{{ profile.business_id }}</dd><dt>Domain</dt><dd>{{ profile.domain }}</dd><dt>Employees</dt><dd>{{ profile.employee_count }}</dd><dt>Incorporated</dt><dd>{{ profile.incorporation_date }}</dd><dt>Ownership</dt><dd>{{ profile.ownership_details }}</dd></dl></section><section class="profile-card"><h2>Contact</h2><dl><dt>Address</dt><dd>{{ profile.company_address }} · {{ profile.pincode }}</dd><dt>Email</dt><dd>{{ profile.company_email }}</dd><dt>Phone</dt><dd>{{ profile.company_phone }}</dd><dt>Website</dt><dd>{{ profile.website or 'Not provided' }}</dd><dt>GST state</dt><dd>{{ profile.gst_state }}</dd></dl></section></div></main>
-<script>document.querySelector('.mobile-menu').onclick=()=>{const n=document.querySelector('.nav-links');n.style.display=n.style.display==='grid'?'':'grid'};</script>
+<main class="container profile-page"><a class="back-link" href="/startup-portal">← Back to dashboard</a>
+    <div class="profile-heading">
+        <div>
+            <div class="kicker">Company profile</div>
+            <h1>{{ profile.business_name }}</h1>
+            <p>{{ profile.business_type }} · {{ profile.sector }} · {{ profile.current_stage }}</p>
+        </div><span class="contract-status active">Verified startup</span>
+    </div>
+    <div class="profile-grid">
+        <section class="profile-card">
+            <h2>Company details</h2>
+            <dl>
+                <dt>Business ID</dt>
+                <dd>{{ profile.business_id }}</dd>
+                <dt>Domain</dt>
+                <dd>{{ profile.domain }}</dd>
+                <dt>Employees</dt>
+                <dd>{{ profile.employee_count }}</dd>
+                <dt>Incorporated</dt>
+                <dd>{{ profile.incorporation_date }}</dd>
+                <dt>Ownership</dt>
+                <dd>{{ profile.ownership_details }}</dd>
+            </dl>
+        </section>
+        <section class="profile-card">
+            <h2>Contact</h2>
+            <dl>
+                <dt>Address</dt>
+                <dd>{{ profile.company_address }} · {{ profile.pincode }}</dd>
+                <dt>Email</dt>
+                <dd>{{ profile.company_email }}</dd>
+                <dt>Phone</dt>
+                <dd>{{ profile.company_phone }}</dd>
+                <dt>Website</dt>
+                <dd>{{ profile.website or 'Not provided' }}</dd>
+                <dt>GST state</dt>
+                <dd>{{ profile.gst_state }}</dd>
+            </dl>
+        </section>
+    </div>
+</main>
+<script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };</script>
 {% endblock %}
