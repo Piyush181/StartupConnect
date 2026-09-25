@@ -126,160 +126,32 @@ CREATE TABLE IF NOT EXISTS applications (
 )
 """
 
-APPLICATION_SCREENINGS_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_screenings (
-    screening_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    application_id VARCHAR(80) NOT NULL,
-    reviewer_id VARCHAR(255) NOT NULL,
-    reviewer_role VARCHAR(30) NOT NULL,
-    requirement TEXT NOT NULL,
-    decision VARCHAR(40) NOT NULL,
-    comment TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_screenings_application (application_id),
-    INDEX idx_screenings_requirement (application_id, screening_id)
-)
-"""
-
-APPLICATION_SCREENING_AUDIT_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_screening_audit (
-    audit_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    application_id VARCHAR(80) NOT NULL,
-    reviewer_id VARCHAR(255) NOT NULL,
-    reviewer_role VARCHAR(30) NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
-    details LONGTEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_screening_audit_application (application_id),
-    INDEX idx_screening_audit_event (application_id, event_type)
-)
-"""
-
-APPLICATION_EVALUATIONS_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_evaluations (
-    evaluation_id VARCHAR(80) NOT NULL PRIMARY KEY,
-    application_id VARCHAR(80) NOT NULL UNIQUE,
-    reviewer_id VARCHAR(255) NOT NULL,
-    reviewer_role VARCHAR(30) NOT NULL,
-    total_score DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    maximum_total_score DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    status VARCHAR(30) NOT NULL,
-    started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at TIMESTAMP NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_evaluations_status (status)
-)
-"""
-
-APPLICATION_EVALUATION_SCORES_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_evaluation_scores (
-    score_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    evaluation_id VARCHAR(80) NOT NULL,
-    application_id VARCHAR(80) NOT NULL,
-    reviewer_id VARCHAR(255) NOT NULL,
-    reviewer_role VARCHAR(30) NOT NULL,
-    criterion VARCHAR(255) NOT NULL,
-    description TEXT NOT NULL,
-    score DECIMAL(10, 2) NULL,
-    maximum_score DECIMAL(10, 2) NOT NULL,
-    weight DECIMAL(10, 2) NOT NULL,
-    is_required TINYINT(1) NOT NULL DEFAULT 1,
-    comment TEXT NOT NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uq_evaluation_criterion (evaluation_id, criterion),
-    INDEX idx_evaluation_scores_application (application_id)
-)
-"""
-
-APPLICATION_EVALUATION_AUDIT_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_evaluation_audit (
-    audit_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    application_id VARCHAR(80) NOT NULL,
-    evaluation_id VARCHAR(80) NOT NULL,
-    reviewer_id VARCHAR(255) NOT NULL,
-    reviewer_role VARCHAR(30) NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
-    details LONGTEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_evaluation_audit_application (application_id),
-    INDEX idx_evaluation_audit_evaluation (evaluation_id, audit_id)
-)
-"""
-
-APPLICATION_SHORTLIST_DECISIONS_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_shortlist_decisions (
-    decision_id VARCHAR(80) NOT NULL PRIMARY KEY,
-    application_id VARCHAR(80) NOT NULL UNIQUE,
-    decision VARCHAR(30) NOT NULL,
-    decision_maker VARCHAR(255) NOT NULL,
-    decision_role VARCHAR(30) NOT NULL,
-    comments TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_shortlist_decision (decision)
-)
-"""
-
-APPLICATION_SHORTLIST_AUDIT_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_shortlist_audit (
-    audit_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    application_id VARCHAR(80) NOT NULL,
-    decision_id VARCHAR(80) NOT NULL,
-    decision_maker VARCHAR(255) NOT NULL,
-    decision_role VARCHAR(30) NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
-    details LONGTEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_shortlist_audit_application (application_id),
-    INDEX idx_shortlist_audit_decision (decision_id, audit_id)
-)
-"""
-
-CHALLENGE_FINAL_SELECTIONS_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS challenge_final_selections (
-    selection_id VARCHAR(80) NOT NULL PRIMARY KEY,
-    challenge_id VARCHAR(100) NOT NULL UNIQUE,
-    decision_maker VARCHAR(255) NOT NULL,
-    decision_role VARCHAR(30) NOT NULL,
-    reason TEXT NOT NULL,
-    selected_application_ids LONGTEXT NOT NULL,
-    confirmed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_final_selections_decision_maker (decision_maker)
-)
-"""
-
-APPLICATION_FINAL_SELECTION_DECISIONS_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS application_final_selection_decisions (
-    decision_id VARCHAR(80) NOT NULL PRIMARY KEY,
-    selection_id VARCHAR(80) NOT NULL,
-    challenge_id VARCHAR(100) NOT NULL,
-    application_id VARCHAR(80) NOT NULL UNIQUE,
-    business_id_encrypted TEXT NOT NULL,
-    decision VARCHAR(30) NOT NULL,
-    decision_maker VARCHAR(255) NOT NULL,
-    decision_role VARCHAR(30) NOT NULL,
-    reason TEXT NOT NULL,
-    comments TEXT NOT NULL,
-    decided_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_final_selection_challenge (challenge_id),
-    INDEX idx_final_selection_status (decision)
-)
-"""
-
-FINAL_SELECTION_AUDIT_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS final_selection_audit (
-    audit_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    challenge_id VARCHAR(100) NOT NULL,
-    application_id VARCHAR(80),
-    selection_id VARCHAR(80) NOT NULL,
-    decision_maker VARCHAR(255) NOT NULL,
-    decision_role VARCHAR(30) NOT NULL,
-    event_type VARCHAR(50) NOT NULL,
-    details LONGTEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_final_selection_audit_challenge (challenge_id),
-    INDEX idx_final_selection_audit_application (application_id)
-)
-"""
+SAMPLE_STARTUP_DATA = {
+    "business_id": "demo-startup-mh",
+    "password": "DemoStartup@123",
+    "password_confirmation": "DemoStartup@123",
+    "business_name": "FieldSense Innovations",
+    "business_type": "Private Limited Company",
+    "cin": "U72900MH2022PTC123456",
+    "ownership_details": "Indian-owned technology startup",
+    "incorporation_date": "2022-06-15",
+    "sector": "Agriculture",
+    "domain": "AI-powered crop advisory and field monitoring",
+    "employee_count": "24",
+    "current_stage": "Growth",
+    "company_address": "Bandra Kurla Complex, Mumbai, Maharashtra",
+    "company_email": "hello@fieldsense.example",
+    "company_phone": "+91 98765 43210",
+    "website": "https://fieldsense.example",
+    "pincode": "400051",
+    "representative_name": "Ananya Kulkarni",
+    "representative_title": "Chief Executive Officer",
+    "representative_email": "ananya@fieldsense.example",
+    "representative_phone": "+91 98765 43210",
+    "gstin": "27AAAAA0000A1Z5",
+    "gst_state": "Maharashtra",
+    "gst_details": "Regular GST registration",
+}
 
 
 class DuplicateApplicationError(Exception):
@@ -385,10 +257,61 @@ def _open_connection():
     return mysql.connector.connect(**MYSQL_CONFIG)
 
 
+def _seed_sample_startup(connection, cursor, cipher: Fernet) -> None:
+    """Ensure the local demo startup exists without creating duplicates."""
+    business_id = SAMPLE_STARTUP_DATA["business_id"]
+    cursor.execute(
+        "SELECT id FROM startup_registrations WHERE business_id_hash = %s",
+        (_lookup_hash(business_id),),
+    )
+    if cursor.fetchone() is not None:
+        return
+
+    representative = {
+        "name": SAMPLE_STARTUP_DATA["representative_name"],
+        "title": SAMPLE_STARTUP_DATA["representative_title"],
+        "email": SAMPLE_STARTUP_DATA["representative_email"],
+        "phone": SAMPLE_STARTUP_DATA["representative_phone"],
+    }
+    cursor.execute(
+        """INSERT INTO startup_registrations (
+            business_id_encrypted, business_id_hash, password_hash, business_name, business_type,
+            cin_encrypted, ownership_details, incorporation_date, sector,
+            domain, employee_count, current_stage, company_address,
+            company_email, company_phone, website, pincode,
+            representative_encrypted, gstin_encrypted, gst_state, gst_details
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        (
+            _encrypted(cipher, business_id),
+            _lookup_hash(business_id),
+            generate_password_hash(SAMPLE_STARTUP_DATA["password"]),
+            SAMPLE_STARTUP_DATA["business_name"],
+            SAMPLE_STARTUP_DATA["business_type"],
+            _encrypted(cipher, SAMPLE_STARTUP_DATA["cin"]),
+            SAMPLE_STARTUP_DATA["ownership_details"],
+            SAMPLE_STARTUP_DATA["incorporation_date"],
+            SAMPLE_STARTUP_DATA["sector"],
+            SAMPLE_STARTUP_DATA["domain"],
+            int(SAMPLE_STARTUP_DATA["employee_count"]),
+            SAMPLE_STARTUP_DATA["current_stage"],
+            SAMPLE_STARTUP_DATA["company_address"],
+            SAMPLE_STARTUP_DATA["company_email"],
+            SAMPLE_STARTUP_DATA["company_phone"],
+            SAMPLE_STARTUP_DATA["website"],
+            SAMPLE_STARTUP_DATA["pincode"],
+            _encrypted(cipher, json.dumps(representative)),
+            _encrypted(cipher, SAMPLE_STARTUP_DATA["gstin"]),
+            SAMPLE_STARTUP_DATA["gst_state"],
+            SAMPLE_STARTUP_DATA["gst_details"],
+        ),
+    )
+
+
 def _prepare_auth_tables(connection, cursor, cipher: Fernet) -> None:
     cursor.execute(SCHEMA_SQL)
     cursor.execute(MINFO_SCHEMA_SQL)
     cursor.execute(CONTRACTS_SCHEMA_SQL)
+    _seed_sample_startup(connection, cursor, cipher)
     cursor.execute("SELECT id FROM minfo LIMIT 1")
     if cursor.fetchone() is None:
         cursor.execute(
@@ -587,8 +510,8 @@ def save_application(
         connection.commit()
         cursor.execute(
             """SELECT application_id, challenge_id, business_id_encrypted, status,
-                      application_data, submitted_at, updated_at
-               FROM applications WHERE application_id = %s AND business_id_hash = %s""",
+                application_data, submitted_at, updated_at
+                FROM applications WHERE application_id = %s AND business_id_hash = %s""",
             (application_id, business_hash),
         )
         row = cast(tuple[Any, ...] | None, cursor.fetchone())
