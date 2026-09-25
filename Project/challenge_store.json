@@ -1,0 +1,97 @@
+{
+  "drafts": {
+    "gov-2026-00001": {
+      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
+      "ministry": "Maharashtra State Innovation Society",
+      "state": "Maharashtra",
+      "status": "created",
+      "title": "Fixed Identity Challenge",
+      "challengeId": "GOV-2026-00001",
+      "updatedAt": "2026-09-25T17:40:53Z",
+      "createdBy": "admin",
+      "id": "gov-2026-00001"
+    },
+    "gov-2026-00002": {
+      "status": "created",
+      "title": "Contract Persistence Challenge",
+      "ministry": "Maharashtra State Innovation Society",
+      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
+      "state": "Maharashtra",
+      "challengeId": "GOV-2026-00002",
+      "updatedAt": "2026-09-25T17:40:53Z",
+      "createdBy": "admin",
+      "id": "gov-2026-00002"
+    },
+    "gov-2026-01001": {
+      "categoryList": [
+        "Other",
+        "Community Health",
+        "Rural Mobility"
+      ],
+      "challengeId": "GOV-2026-01001",
+      "challengeType": "Software",
+      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
+      "ministry": "Maharashtra State Innovation Society",
+      "otherValues": {
+        "categoryList": [
+          "Community Health",
+          "Rural Mobility"
+        ],
+        "technicalConstraints": [
+          "Field inspections"
+        ]
+      },
+      "state": "Maharashtra",
+      "status": "created",
+      "title": "Community Mobility Challenge",
+      "updatedAt": "2026-09-25T17:40:53Z",
+      "createdBy": "admin",
+      "id": "gov-2026-01001"
+    },
+    "gov-2026-01000": {
+      "category": "AI / ML",
+      "challengeId": "GOV-2026-01000",
+      "challengeType": "Software",
+      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
+      "ministry": "Maharashtra State Innovation Society",
+      "state": "Maharashtra",
+      "status": "created",
+      "title": "Waste Monitoring Challenge",
+      "updatedAt": "2026-09-25T17:40:53Z",
+      "createdBy": "admin",
+      "id": "gov-2026-01000"
+    }
+  },
+  "published": {
+    "gov-2026-periodic-001": {
+      "challengeId": "GOV-2026-PERIODIC-001",
+      "evaluationCriteria": [
+        {
+          "criterion": "Impact",
+          "description": "Public value",
+          "weight": 100
+        }
+      ],
+      "status": "currently bidding",
+      "title": "Periodic Reporting Challenge",
+      "ministry": "Maharashtra State Innovation Society",
+      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
+      "state": "Maharashtra",
+      "updatedAt": "2026-09-25T17:40:53Z",
+      "createdBy": "admin",
+      "id": "gov-2026-periodic-001",
+      "periodicChecks": [
+        {
+          "checkId": "CHECK-GOV-2026-PERIODIC-001-001",
+          "title": "Monthly progress report",
+          "frequency": "Monthly",
+          "dueDate": "2026-10-31",
+          "notification": "Send your progress report and evidence.",
+          "status": "Awaiting Startup Report",
+          "createdAt": "2026-09-25T17:40:53Z",
+          "reports": []
+        }
+      ]
+    }
+  }
+}
