@@ -1,0 +1,136 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell final-selection-page">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Final government selection · {{ challenge.challengeId }}</div>
+            <h1>{{ challenge.title }}</h1>
+            {% if confirmed %}
+            <p class="dashboard-subtitle">Selection confirmed by {{ final_selection.decision_maker }} · {{ final_selection.confirmed_at }}</p>
+            {% elif review %}
+            <p class="dashboard-subtitle">Review the selected startup(s) and all remaining shortlist outcomes before confirming.</p>
+            {% else %}
+            <p class="dashboard-subtitle">Only shortlisted applications are included. Government makes the final decision explicitly.</p>
+            {% endif %}
+        </div>
+        <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/comparison">Back to comparison</a>
+    </section>
+
+    {% if confirmed %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Confirmed selection</h2><span class="challenge-id">{{ final_selection.selection_id }}</span></div>
+        <p><strong>Government reason:</strong> {{ final_selection.reason }}</p>
+        <div class="comparison-table-wrap">
+            <table class="comparison-table">
+                <thead><tr><th>Outcome</th><th>Startup</th><th>Business ID</th><th>Application ID</th><th>Evaluation score</th><th>Eligibility</th><th>Shortlist status</th><th>Comments</th></tr></thead>
+                <tbody>
+                    {% for item in final_selection.applications %}
+                    <tr>
+                        <td data-label="Outcome"><span class="status-badge {{ 'published' if item.decision == 'selected' else 'closed' }}">{{ 'Selected' if item.decision == 'selected' else 'Not Selected' }}</span></td>
+                        <td data-label="Startup">{{ item.startup_name }}</td>
+                        <td data-label="Business ID">{{ item.business_id }}</td>
+                        <td data-label="Application ID"><a href="/government-applications/{{ item.application_id }}">{{ item.application_id }}</a></td>
+                        <td data-label="Evaluation score">{{ '%.2f' | format(item.total_score) }} / {{ '%.2f' | format(item.maximum_total_score) }}</td>
+                        <td data-label="Eligibility">Eligible</td>
+                        <td data-label="Shortlist status">Shortlisted</td>
+                        <td data-label="Comments">{{ item.comments }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Final selection audit</h2></div>
+        <div class="dashboard-progress-list">{% for event in final_selection.audit %}<span>{{ event.event_type | replace('_', ' ') | title }}{% if event.application_id %} · {{ event.application_id }}{% endif %} · {{ event.decision_maker }} ({{ event.decision_role }}) · {{ event.created_at }}</span>{% endfor %}</div>
+    </section>
+    {% elif not shortlisted %}
+    <section class="challenge-panel"><div class="empty-state"><p>No shortlisted applications are available for final selection.</p></div></section>
+    {% elif review %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Confirm final selection</h2></div>
+        <p><strong>Challenge:</strong> {{ challenge.title }} · {{ challenge.challengeId }}</p>
+        <p><strong>Decision reason:</strong> {{ selection.reason }}</p>
+        <div class="comparison-table-wrap">
+            <table class="comparison-table">
+                <thead><tr><th>Final decision</th><th>Startup</th><th>Application ID</th><th>Evaluation score</th><th>Eligibility</th><th>Shortlist status</th><th>Comments</th></tr></thead>
+                <tbody>
+                    {% for item in shortlisted %}
+                    <tr>
+                        <td data-label="Final decision"><strong>{{ 'Selected' if item.final_decision == 'selected' else 'Not Selected' }}</strong></td>
+                        <td data-label="Startup">{{ item.startup_name }}</td>
+                        <td data-label="Application ID">{{ item.application_id }}</td>
+                        <td data-label="Evaluation score">{{ '%.2f' | format(item.total_score) }} / {{ '%.2f' | format(item.maximum_total_score) }}</td>
+                        <td data-label="Eligibility">Eligible</td>
+                        <td data-label="Shortlist status">Shortlisted</td>
+                        <td data-label="Comments">{{ item.final_comment }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <form data-final-selection-confirm data-challenge-id="{{ challenge.challengeId }}">
+            <input type="hidden" name="reason" value="{{ selection.reason }}">
+            {% for application_id in selection.selected_ids %}<input type="hidden" name="selected_application_ids" value="{{ application_id }}">{% endfor %}
+            {% for item in shortlisted %}<input type="hidden" name="comments_by_application[{{ item.application_id }}]" value="{{ item.final_comment }}">{% endfor %}
+            <div class="application-actions">
+                <button class="button" type="submit">Confirm Final Selection</button>
+                <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/final-selection">Revise decisions</a>
+                <span class="form-message" data-final-selection-status role="status"></span>
+            </div>
+        </form>
+    </section>
+    {% else %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Choose selected startup(s)</h2>
+            {% if maximum_selected %}<span class="form-note">Maximum selected: {{ maximum_selected }}</span>{% else %}<span class="form-note">No selection limit is configured for this challenge.</span>{% endif %}
+        </div>
+        <form method="post" action="/government-dashboard/{{ challenge.challengeId }}/final-selection/review" class="final-selection-form">
+            <label class="final-selection-reason">Final government decision reason<textarea name="reason" rows="3" maxlength="4000" required></textarea></label>
+            <div class="comparison-table-wrap">
+                <table class="comparison-table">
+                    <thead><tr><th>Select</th><th>Startup</th><th>Application ID</th><th>Evaluation score</th><th>Eligibility</th><th>Shortlist status</th><th>Decision comments</th></tr></thead>
+                    <tbody>
+                        {% for item in shortlisted %}
+                        <tr>
+                            <td data-label="Select"><label class="final-selection-choice"><input type="checkbox" name="selected_application_ids" value="{{ item.application_id }}"> Select</label></td>
+                            <td data-label="Startup">{{ item.startup_name }}</td>
+                            <td data-label="Application ID">{{ item.application_id }}</td>
+                            <td data-label="Evaluation score">{{ '%.2f' | format(item.total_score) }} / {{ '%.2f' | format(item.maximum_total_score) }}</td>
+                            <td data-label="Eligibility">Eligible</td>
+                            <td data-label="Shortlist status">Shortlisted</td>
+                            <td data-label="Decision comments"><textarea name="comments_{{ item.application_id }}" rows="2" maxlength="4000" required></textarea></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="application-actions"><button class="button" type="submit">Review Final Selection</button><span class="form-note">Shortlisting and scores do not select startups automatically.</span></div>
+        </form>
+    </section>
+    {% endif %}
+</main>
+<script>
+    const finalSelectionForm = document.querySelector('[data-final-selection-confirm]');
+    finalSelectionForm?.addEventListener('submit', async event => {
+        event.preventDefault();
+        const status = finalSelectionForm.querySelector('[data-final-selection-status]');
+        const formData = new FormData(finalSelectionForm);
+        const selectedApplicationIds = formData.getAll('selected_application_ids');
+        const commentsByApplication = {};
+        for (const [key, value] of formData.entries()) {
+            const match = key.match(/^comments_by_application\[(.+)\]$/);
+            if (match) commentsByApplication[match[1]] = value;
+        }
+        status.textContent = 'Confirming selection...';
+        const response = await fetch(`/api/government/challenges/${finalSelectionForm.dataset.challengeId}/final-selection/confirm`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selected_application_ids: selectedApplicationIds, comments_by_application: commentsByApplication, reason: formData.get('reason') })
+        });
+        const result = await response.json();
+        status.textContent = result.message;
+        if (response.ok) window.location.href = `/government-dashboard/${finalSelectionForm.dataset.challengeId}/final-selection`;
+    });
+</script>
+{% endblock %}

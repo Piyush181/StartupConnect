@@ -30,6 +30,9 @@ from database import (
     list_challenge_evaluation_comparison,
     record_application_shortlist_decision,
     get_application_shortlist_history,
+    confirm_challenge_final_selection,
+    get_application_final_selection,
+    get_challenge_final_selection,
     get_application,
     list_challenge_applications,
     list_startup_applications,
@@ -483,8 +486,25 @@ def _application_status_fields(application):
         "evaluation_complete": "Evaluation Complete",
         "shortlisted": "Evaluation Complete",
         "not_selected": "Evaluation Complete",
+        "selected": "Evaluation Complete",
     }.get(status, "Not Started" if status == "eligible" else "Locked" if status == "ineligible" else "Not Started")
     return {**application, "eligibility_status": eligibility_status, "evaluation_status": evaluation_status}
+
+
+def _maximum_selected_startups(challenge):
+    configuration = challenge.get("selectionConfiguration") or challenge.get("selectionConfig") or {}
+    if not isinstance(configuration, dict):
+        raise ValueError("Challenge selection configuration must be an object.")
+    configured_limit = configuration.get("maximumSelectedStartups", configuration.get("maxSelectedStartups"))
+    if configured_limit in (None, ""):
+        return None
+    try:
+        numeric_limit = float(configured_limit)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Maximum selected startups must be a positive whole number.") from error
+    if not math.isfinite(numeric_limit) or not numeric_limit.is_integer() or numeric_limit < 1:
+        raise ValueError("Maximum selected startups must be a positive whole number.")
+    return int(numeric_limit)
 
 
 def _evaluation_criteria(challenge):
@@ -995,6 +1015,10 @@ def save_challenge():
     challenge["ministry"] = FIXED_GOVERNMENT_BODY
     challenge["department"] = FIXED_DEPARTMENT
     challenge["state"] = FIXED_STATE
+    try:
+        _maximum_selected_startups(challenge)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
     if challenge.get("status") == "Published":
         criteria = challenge.get("evaluationCriteria") or []
         total_weight = sum(float(item.get("weight", 0) or 0) for item in criteria if isinstance(item, dict))
@@ -1574,11 +1598,162 @@ def government_challenge_comparison_page(challenge_id):
     if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
         return ("You are not authorized to compare applications for this challenge.", 403)
     try:
+        if get_challenge_final_selection(challenge_id):
+            return ("Final selection has already been confirmed for this challenge.", 409)
         applications = list_challenge_evaluation_comparison(challenge_id)
     except Exception:
         app.logger.exception("Could not load evaluation comparison for challenge %s.", challenge_id)
         return ("Evaluation comparison is temporarily unavailable.", 503)
     return render_template("challenge-comparison.htm", challenge=challenge, applications=applications)
+
+
+def _prepare_final_selection(challenge, applications, selected_application_ids, reason, comments_by_application):
+    shortlisted = [item for item in applications if item.get("selection_status") == "shortlisted"]
+    shortlisted_ids = {item["application_id"] for item in shortlisted}
+    selected_ids = list(selected_application_ids)
+    selected_set = set(selected_ids)
+    if not selected_set:
+        raise ValueError("Select at least one shortlisted startup.")
+    if len(selected_set) != len(selected_ids) or not selected_set.issubset(shortlisted_ids):
+        raise ValueError("Only shortlisted applications can be selected, and each may be selected once.")
+    maximum = _maximum_selected_startups(challenge)
+    if maximum is not None and len(selected_set) > maximum:
+        raise ValueError(f"This challenge allows at most {maximum} selected startup(s).")
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("Add a final government decision reason.")
+    if len(reason) > 4000:
+        raise ValueError("The final selection reason exceeds the 4,000 character limit.")
+    decisions = []
+    for item in shortlisted:
+        application_id = item["application_id"]
+        comment = str(comments_by_application.get(application_id) or "").strip()
+        if not comment:
+            raise ValueError("Add final selection comments for every shortlisted application.")
+        if len(comment) > 4000:
+            raise ValueError("A final selection comment exceeds the 4,000 character limit.")
+        decisions.append({
+            **item,
+            "final_decision": "selected" if application_id in selected_set else "not_selected",
+            "final_comment": comment,
+        })
+    return {"selected_ids": selected_set, "reason": reason, "decisions": decisions, "maximum": maximum}
+
+
+@app.get("/government-dashboard/<challenge_id>/final-selection")
+@session_required("ministry")
+def government_final_selection_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to select applications for this challenge.", 403)
+    try:
+        selection = get_challenge_final_selection(challenge_id)
+        applications = [] if selection else [
+            item for item in list_challenge_evaluation_comparison(challenge_id)
+            if item.get("selection_status") == "shortlisted"
+        ]
+        maximum = _maximum_selected_startups(challenge)
+    except ValueError as error:
+        return (str(error), 400)
+    except Exception:
+        app.logger.exception("Could not load shortlisted applications for challenge %s.", challenge_id)
+        return ("Final selection is temporarily unavailable.", 503)
+    return render_template(
+        "challenge-final-selection.htm",
+        challenge=challenge,
+        shortlisted=applications,
+        review=False,
+        confirmed=selection is not None,
+        selection=None,
+        final_selection=selection,
+        maximum_selected=maximum,
+    )
+
+
+@app.post("/government-dashboard/<challenge_id>/final-selection/review")
+@session_required("ministry")
+def review_government_final_selection(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to select applications for this challenge.", 403)
+    try:
+        applications = list_challenge_evaluation_comparison(challenge_id)
+        comments_by_application = {
+            item["application_id"]: request.form.get(f"comments_{item['application_id']}", "")
+            for item in applications
+        }
+        selection = _prepare_final_selection(
+            challenge,
+            applications,
+            request.form.getlist("selected_application_ids"),
+            request.form.get("reason"),
+            comments_by_application,
+        )
+    except ValueError as error:
+        return (str(error), 400)
+    except Exception:
+        app.logger.exception("Could not prepare final selection for challenge %s.", challenge_id)
+        return ("Final selection is temporarily unavailable.", 503)
+    return render_template(
+        "challenge-final-selection.htm",
+        challenge=challenge,
+        shortlisted=selection["decisions"],
+        review=True,
+        selection=selection,
+    )
+
+
+@app.post("/api/government/challenges/<challenge_id>/final-selection/confirm")
+def confirm_government_final_selection(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return jsonify({"ok": False, "message": "You are not authorized to select applications for this challenge."}), 403
+    payload = request.get_json(silent=True) or {}
+    selected_ids = payload.get("selected_application_ids")
+    comments_by_application = payload.get("comments_by_application")
+    if not isinstance(selected_ids, list) or not isinstance(comments_by_application, dict):
+        return jsonify({"ok": False, "message": "Final selection data is invalid."}), 400
+    try:
+        if get_challenge_final_selection(challenge_id):
+            return jsonify({"ok": False, "message": "Final selection has already been confirmed for this challenge."}), 409
+        applications = list_challenge_evaluation_comparison(challenge_id)
+        selection = _prepare_final_selection(
+            challenge,
+            applications,
+            selected_ids,
+            payload.get("reason"),
+            comments_by_application,
+        )
+        outcomes = confirm_challenge_final_selection(
+            challenge_id,
+            list(selection["selected_ids"]),
+            session["ministry_id"],
+            "ministry",
+            selection["reason"],
+            comments_by_application,
+        )
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not confirm final selection for challenge %s.", challenge_id)
+        return jsonify({"ok": False, "message": "Final selection could not be confirmed."}), 503
+    if outcomes is None:
+        return jsonify({"ok": False, "message": "The shortlist changed or final selection was already confirmed. Reload and review again."}), 409
+    return jsonify({
+        "ok": True,
+        "message": "Final government selection confirmed.",
+        "selection_id": outcomes.get("selection_id"),
+        "applications": outcomes.get("applications", []),
+    })
 
 
 @app.get("/government-applications/<application_id>")
@@ -1601,6 +1776,7 @@ def government_application_detail(application_id):
         screening = get_application_screening(application_id)
         evaluation = get_application_evaluation(application_id)
         shortlist = get_application_shortlist_history(application_id)
+        final_selection = get_application_final_selection(application_id)
     except Exception:
         app.logger.exception("Could not load review details for application %s.", application_id)
         return ("Application review is temporarily unavailable.", 503)
@@ -1621,6 +1797,7 @@ def government_application_detail(application_id):
         evaluation=evaluation,
         evaluation_criteria=evaluation_criteria,
         shortlist=shortlist,
+        final_selection=final_selection,
     )
 
 
@@ -1652,10 +1829,11 @@ def government_application_api(application_id):
         screening = get_application_screening(application_id)
         evaluation = get_application_evaluation(application_id)
         shortlist = get_application_shortlist_history(application_id)
+        final_selection = get_application_final_selection(application_id)
     except Exception:
         app.logger.exception("Could not load review history for application %s.", application_id)
         return jsonify({"ok": False, "message": "Application review is temporarily unavailable."}), 503
-    return jsonify({"ok": True, "application": _application_status_fields(application), "screening": screening, "evaluation": evaluation, "shortlist": shortlist})
+    return jsonify({"ok": True, "application": _application_status_fields(application), "screening": screening, "evaluation": evaluation, "shortlist": shortlist, "final_selection": final_selection})
 
 
 @app.post("/api/government/applications/<application_id>/screening/start")

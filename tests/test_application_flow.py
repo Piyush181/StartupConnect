@@ -24,6 +24,9 @@ class ApplicationFlowTests(unittest.TestCase):
         self.evaluations = {}
         self.shortlist_decisions = {}
         self.shortlist_audit_records = {}
+        self.final_selections = {}
+        self.final_selection_decisions = {}
+        self.final_selection_audit = {}
         self.profile = {"business_id": "startup-001", "business_name": "Example Startup", "business_type": "Startup"}
         replacements = {
             "save_application": self._save_application,
@@ -43,6 +46,9 @@ class ApplicationFlowTests(unittest.TestCase):
             "list_challenge_evaluation_comparison": self._list_challenge_evaluation_comparison,
             "record_application_shortlist_decision": self._record_application_shortlist_decision,
             "get_application_shortlist_history": self._get_application_shortlist_history,
+            "confirm_challenge_final_selection": self._confirm_challenge_final_selection,
+            "get_challenge_final_selection": self._get_challenge_final_selection,
+            "get_application_final_selection": self._get_application_final_selection,
             "get_startup_clarification_request": self._get_startup_clarification_request,
             "count_challenge_applications": self._count_challenge_applications,
             "get_startup_profile": lambda _business_id: self.profile,
@@ -229,20 +235,21 @@ class ApplicationFlowTests(unittest.TestCase):
         results = []
         for (challenge, _owner), record in self.records.items():
             evaluation = self.evaluations.get(record["application_id"])
-            if challenge != challenge_id or record["status"] not in {"evaluation_complete", "shortlisted", "not_selected"} or not evaluation or evaluation["status"] != "evaluation_complete":
+            if challenge != challenge_id or record["status"] not in {"evaluation_complete", "shortlisted", "not_selected", "selected"} or not evaluation or evaluation["status"] != "evaluation_complete":
                 continue
             decision = self.shortlist_decisions.get(record["application_id"])
+            final_decision = self.final_selection_decisions.get(record["application_id"])
             results.append({
                 **record,
                 "startup_name": self.profile["business_name"],
                 "total_score": evaluation["total_score"],
                 "maximum_total_score": evaluation["maximum_total_score"],
                 "evaluation_completed_at": evaluation["completed_at"],
-                "selection_status": decision["decision"] if decision else "Pending Decision",
-                "decision_maker": decision["decision_maker"] if decision else None,
-                "decision_role": decision["decision_role"] if decision else None,
-                "decision_comments": decision["comments"] if decision else "",
-                "decision_at": decision["created_at"] if decision else None,
+                "selection_status": record["status"] if final_decision else decision["decision"] if decision else "Pending Decision",
+                "decision_maker": final_decision["decision_maker"] if final_decision else decision["decision_maker"] if decision else None,
+                "decision_role": final_decision["decision_role"] if final_decision else decision["decision_role"] if decision else None,
+                "decision_comments": final_decision["comments"] if final_decision else decision["comments"] if decision else "",
+                "decision_at": final_decision["decided_at"] if final_decision else decision["created_at"] if decision else None,
             })
         return results
 
@@ -278,6 +285,92 @@ class ApplicationFlowTests(unittest.TestCase):
             "history": list(self.shortlist_audit_records.get(application_id, [])),
         }
 
+    def _confirm_challenge_final_selection(self, challenge_id, selected_application_ids, decision_maker, decision_role, reason, comments_by_application):
+        if challenge_id in self.final_selections:
+            return None
+        candidates = [
+            record for (challenge, _owner), record in self.records.items()
+            if challenge == challenge_id and record["status"] == "shortlisted"
+        ]
+        candidate_ids = {record["application_id"] for record in candidates}
+        selected = set(selected_application_ids)
+        if not candidates or not selected or not selected.issubset(candidate_ids):
+            return None
+        if any(not comments_by_application.get(application_id) for application_id in candidate_ids):
+            raise ValueError("Add a final decision reason for every shortlisted application.")
+        selection_id = f"FINAL-{challenge_id}"
+        now = "2026-09-26T12:00:00"
+        self.final_selections[challenge_id] = {
+            "selection_id": selection_id,
+            "decision_maker": decision_maker,
+            "decision_role": decision_role,
+            "reason": reason,
+            "selected_application_ids": sorted(selected),
+            "confirmed_at": now,
+        }
+        outcomes = []
+        for record in candidates:
+            application_id = record["application_id"]
+            decision = "selected" if application_id in selected else "not_selected"
+            comments = comments_by_application[application_id]
+            record["status"] = decision
+            final_record = {
+                "decision": decision,
+                "decision_maker": decision_maker,
+                "decision_role": decision_role,
+                "reason": reason,
+                "comments": comments,
+                "decided_at": now,
+                "selected_business_id": record["business_id"] if decision == "selected" else None,
+                "confirmed_at": now,
+            }
+            self.final_selection_decisions[application_id] = final_record
+            self.final_selection_audit.setdefault(challenge_id, []).append({
+                "application_id": application_id,
+                "event_type": "application_selected" if decision == "selected" else "application_not_selected",
+                "decision_maker": decision_maker,
+                "decision_role": decision_role,
+                "details": {"reason": reason, "comments": comments},
+                "created_at": now,
+            })
+            outcomes.append({"application_id": application_id, "decision": decision})
+        self.final_selection_audit[challenge_id].append({
+            "application_id": None,
+            "event_type": "final_selection_confirmed",
+            "decision_maker": decision_maker,
+            "decision_role": decision_role,
+            "details": {"selected_application_ids": sorted(selected), "reason": reason},
+            "created_at": now,
+        })
+        return {"selection_id": selection_id, "applications": outcomes}
+
+    def _get_challenge_final_selection(self, challenge_id):
+        selection = self.final_selections.get(challenge_id)
+        if not selection:
+            return None
+        outcomes = []
+        for application_id, decision in self.final_selection_decisions.items():
+            record = next((item for item in self.records.values() if item["application_id"] == application_id), None)
+            if record and record["challenge_id"] == challenge_id:
+                evaluation = self.evaluations[application_id]
+                outcomes.append({
+                    "application_id": application_id,
+                    "business_id": decision["selected_business_id"] or record["business_id"],
+                    "startup_name": self.profile["business_name"],
+                    "decision": decision["decision"],
+                    "decision_maker": decision["decision_maker"],
+                    "decision_role": decision["decision_role"],
+                    "reason": decision["reason"],
+                    "comments": decision["comments"],
+                    "decided_at": decision["decided_at"],
+                    "total_score": evaluation["total_score"],
+                    "maximum_total_score": evaluation["maximum_total_score"],
+                })
+        return {**selection, "applications": outcomes, "audit": list(self.final_selection_audit[challenge_id])}
+
+    def _get_application_final_selection(self, application_id):
+        return self.final_selection_decisions.get(application_id)
+
     def _get_startup_clarification_request(self, application_id, business_id):
         owner_record = next((record for record in self.records.values()
                              if record["application_id"] == application_id and record["business_id"] == business_id
@@ -301,7 +394,7 @@ class ApplicationFlowTests(unittest.TestCase):
             session["ministry_id"] = ministry_id
         return client
 
-    def _publishable_challenge(self, challenge_id="GOV-APPLY-001", created_by="admin", status="start bidding"):
+    def _publishable_challenge(self, challenge_id="GOV-APPLY-001", created_by="admin", status="start bidding", selection_limit=None):
         challenge = {
             "id": challenge_id.lower(),
             "challengeId": challenge_id,
@@ -318,6 +411,8 @@ class ApplicationFlowTests(unittest.TestCase):
             ],
             "timeline": {"submissionDeadline": "2027-12-31"},
         }
+        if selection_limit is not None:
+            challenge["selectionConfiguration"] = {"maximumSelectedStartups": selection_limit}
         store = application_module._read_store()
         store["published"][challenge["id"]] = challenge
         application_module._write_store(store)
@@ -378,6 +473,41 @@ class ApplicationFlowTests(unittest.TestCase):
         )
         self.assertEqual(completed.status_code, 200)
         return challenge, application
+
+    def _shortlisted_pair(self, selection_limit=None):
+        challenge, first = self._completed_evaluation()
+        if selection_limit is not None:
+            store = application_module._read_store()
+            store["published"][challenge["id"]]["selectionConfiguration"] = {"maximumSelectedStartups": selection_limit}
+            application_module._write_store(store)
+            challenge["selectionConfiguration"] = {"maximumSelectedStartups": selection_limit}
+        ministry = self._ministry_client()
+        first_shortlist = ministry.post(
+            f"/api/government/applications/{first['application_id']}/shortlist",
+            json={"decision": "shortlisted", "comments": "Advance for final decision."},
+        )
+        self.assertEqual(first_shortlist.status_code, 200)
+
+        second_response = self._application_request(
+            self._startup_client("startup-002"),
+            challenge_id=challenge["challengeId"],
+            action="submit",
+            answers=self._required_answers(),
+        )
+        self.assertEqual(second_response.status_code, 200)
+        second = second_response.get_json()["application"]
+        self.assertEqual(self._screen_application(second["application_id"], challenge, "eligible", client=ministry).status_code, 200)
+        self.assertEqual(ministry.post(f"/api/government/applications/{second['application_id']}/evaluation/start").status_code, 200)
+        self.assertEqual(ministry.post(
+            f"/api/government/applications/{second['application_id']}/evaluation",
+            json={"criteria": [{"criterion": "Technical Feasibility", "score": 65, "comment": "Viable."}]},
+        ).status_code, 200)
+        self.assertEqual(ministry.post(f"/api/government/applications/{second['application_id']}/evaluation/complete").status_code, 200)
+        self.assertEqual(ministry.post(
+            f"/api/government/applications/{second['application_id']}/shortlist",
+            json={"decision": "shortlisted", "comments": "Also advance for final decision."},
+        ).status_code, 200)
+        return challenge, first, second
 
     def test_startup_can_create_and_update_own_draft(self):
         self._publishable_challenge()
@@ -550,6 +680,121 @@ class ApplicationFlowTests(unittest.TestCase):
         self.assertEqual(ministry.post(url, json={"decision": "shortlisted", "comments": ""}).status_code, 400)
         self.assertEqual(ministry.post(url, json={"decision": "shortlisted", "comments": "Reason"}).status_code, 200)
         self.assertEqual(ministry.post(url, json={"decision": "not_selected", "comments": "Changed later"}).status_code, 409)
+
+    def test_final_selection_review_shows_confirmation_details_before_mutation(self):
+        challenge, selected, remaining = self._shortlisted_pair()
+        ministry = self._ministry_client()
+        data = {
+            "selected_application_ids": [selected["application_id"]],
+            "reason": "Selected for the next decision stage.",
+            f"comments_{selected['application_id']}": "Strong challenge fit.",
+            f"comments_{remaining['application_id']}": "Not selected for this round.",
+        }
+        response = ministry.post(f"/government-dashboard/{challenge['challengeId']}/final-selection/review", data=data)
+        self.assertEqual(response.status_code, 200)
+        content = response.get_data(as_text=True)
+        for value in (challenge["title"], selected["application_id"], remaining["application_id"], "Selected for the next decision stage.", "Evaluation score", "Shortlist status", "Confirm Final Selection"):
+            self.assertIn(value, content)
+        self.assertEqual(self.records[(challenge["challengeId"], "startup-001")]["status"], "shortlisted")
+        self.assertNotIn(challenge["challengeId"], self.final_selections)
+
+    def test_final_selection_sets_selected_and_not_selected_and_unlocks_pilot_message(self):
+        challenge, selected, remaining = self._shortlisted_pair()
+        ministry = self._ministry_client()
+        payload = {
+            "selected_application_ids": [selected["application_id"]],
+            "reason": "Selected for the next phase.",
+            "comments_by_application": {
+                selected["application_id"]: "Best fit for the challenge.",
+                remaining["application_id"]: "Retained in the audit record.",
+            },
+        }
+        response = ministry.post(f"/api/government/challenges/{challenge['challengeId']}/final-selection/confirm", json=payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ministry.post(f"/api/government/challenges/{challenge['challengeId']}/final-selection/confirm", json=payload).status_code, 409)
+        self.assertEqual(self.records[(challenge["challengeId"], "startup-001")]["status"], "selected")
+        self.assertEqual(self.records[(challenge["challengeId"], "startup-002")]["status"], "not_selected")
+
+        confirmed = ministry.get(f"/government-dashboard/{challenge['challengeId']}/final-selection")
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertIn("Selected for the next phase.", confirmed.get_data(as_text=True))
+        self.assertIn("Application Selected", confirmed.get_data(as_text=True))
+        self.assertIn("Application Not Selected", confirmed.get_data(as_text=True))
+        self.assertIn("Final Selection Confirmed", confirmed.get_data(as_text=True))
+
+        selected_portal = self._startup_client("startup-001").get("/startup-portal").get_data(as_text=True)
+        nonselected_portal = self._startup_client("startup-002").get("/startup-portal").get_data(as_text=True)
+        self.assertIn("Selected — Proceed to Pilot Agreement", selected_portal)
+        self.assertNotIn("Pilot Agreement", nonselected_portal)
+
+        selected_detail = ministry.get(f"/government-applications/{selected['application_id']}").get_data(as_text=True)
+        self.assertIn("Final government selection", selected_detail)
+        final_record = self.final_selection_decisions[selected["application_id"]]
+        self.assertEqual(final_record["selected_business_id"], "startup-001")
+
+    def test_final_selection_rejects_nonshortlisted_and_enforces_challenge_limit(self):
+        challenge, shortlisted, remaining = self._shortlisted_pair(selection_limit=1)
+        ministry = self._ministry_client()
+        under_review = self._application_request(
+            self._startup_client("startup-003"), challenge_id=challenge["challengeId"], action="submit", answers=self._required_answers()
+        ).get_json()["application"]
+        self.assertEqual(self._screen_application(under_review["application_id"], challenge, "eligible", client=ministry).status_code, 200)
+        self.assertEqual(ministry.post(f"/api/government/applications/{under_review['application_id']}/evaluation/start").status_code, 200)
+        self.assertEqual(ministry.post(
+            f"/api/government/applications/{under_review['application_id']}/evaluation",
+            json={"criteria": [{"criterion": "Technical Feasibility", "score": 50, "comment": "Reviewed."}]},
+        ).status_code, 200)
+        self.assertEqual(ministry.post(f"/api/government/applications/{under_review['application_id']}/evaluation/complete").status_code, 200)
+
+        invalid_candidate = ministry.post(
+            f"/api/government/challenges/{challenge['challengeId']}/final-selection/confirm",
+            json={
+                "selected_application_ids": [under_review["application_id"]],
+                "reason": "Invalid candidate.",
+                "comments_by_application": {item["application_id"]: "Decision." for item in (shortlisted, remaining)},
+            },
+        )
+        self.assertEqual(invalid_candidate.status_code, 400)
+        over_limit = ministry.post(
+            f"/api/government/challenges/{challenge['challengeId']}/final-selection/confirm",
+            json={
+                "selected_application_ids": [shortlisted["application_id"], remaining["application_id"]],
+                "reason": "Too many.",
+                "comments_by_application": {shortlisted["application_id"]: "One", remaining["application_id"]: "Two"},
+            },
+        )
+        self.assertEqual(over_limit.status_code, 400)
+        self.assertNotIn(challenge["challengeId"], self.final_selections)
+
+    def test_only_authorized_ministry_can_confirm_final_selection(self):
+        challenge, selected, remaining = self._shortlisted_pair()
+        payload = {
+            "selected_application_ids": [selected["application_id"]],
+            "reason": "A ministry reason.",
+            "comments_by_application": {selected["application_id"]: "Select.", remaining["application_id"]: "Do not select."},
+        }
+        url = f"/api/government/challenges/{challenge['challengeId']}/final-selection/confirm"
+        self.assertEqual(self._startup_client().post(url, json=payload).status_code, 401)
+        self.assertEqual(self._ministry_client("different-ministry").post(url, json=payload).status_code, 403)
+        self.assertNotIn(challenge["challengeId"], self.final_selections)
+
+    def test_challenge_creation_persists_final_selection_limit(self):
+        ministry = self._ministry_client()
+        saved = ministry.post("/api/challenges", json={"challenge": {
+            "challengeId": "GOV-SELECTION-CONFIG",
+            "title": "Selection limit challenge",
+            "status": "Draft",
+            "selectionConfiguration": {"maximumSelectedStartups": 2},
+        }})
+        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.get_json()["challenge"]["selectionConfiguration"]["maximumSelectedStartups"], 2)
+        invalid = ministry.post("/api/challenges", json={"challenge": {
+            "challengeId": "GOV-SELECTION-CONFIG-BAD",
+            "title": "Invalid selection limit challenge",
+            "status": "Draft",
+            "selectionConfiguration": {"maximumSelectedStartups": 1.5},
+        }})
+        self.assertEqual(invalid.status_code, 400)
 
     def test_ministry_application_detail_shows_actual_answers_and_challenge_eligibility(self):
         challenge, application = self._submitted_application()
@@ -855,6 +1100,10 @@ class ApplicationFlowTests(unittest.TestCase):
         for field in ("application_id", "decision", "decision_maker", "decision_role", "comments", "created_at"):
             self.assertIn(field, database.APPLICATION_SHORTLIST_DECISIONS_SCHEMA_SQL)
         self.assertIn("application_shortlist_audit", database.APPLICATION_SHORTLIST_AUDIT_SCHEMA_SQL)
+        self.assertIn("selected_application_ids", database.CHALLENGE_FINAL_SELECTIONS_SCHEMA_SQL)
+        for field in ("application_id", "business_id_encrypted", "decision_maker", "decision_role", "reason", "comments", "decided_at"):
+            self.assertIn(field, database.APPLICATION_FINAL_SELECTION_DECISIONS_SCHEMA_SQL)
+        self.assertIn("final_selection_audit", database.FINAL_SELECTION_AUDIT_SCHEMA_SQL)
 
     def test_application_count_sql_excludes_drafts(self):
         cursor = Mock()
@@ -990,4 +1239,46 @@ class ApplicationFlowTests(unittest.TestCase):
             )
         self.assertFalse(recorded)
         self.assertFalse(any("INSERT INTO application_shortlist_decisions" in call.args[0] for call in cursor.execute.call_args_list))
+        connection.rollback.assert_called_once()
+
+    def test_database_final_selection_updates_every_shortlisted_status_and_audits(self):
+        cursor = Mock()
+        cursor.fetchone.return_value = None
+        cursor.fetchall.return_value = [("APP-1", "encrypted-1"), ("APP-2", "encrypted-2")]
+        cursor.rowcount = 1
+        connection = Mock()
+        connection.cursor.return_value = cursor
+        with patch.object(database, "_open_connection", return_value=connection):
+            outcome = database.confirm_challenge_final_selection(
+                "GOV-1",
+                ["APP-1"],
+                "ministry-7",
+                "ministry",
+                "Select the strongest fit.",
+                {"APP-1": "Selected for readiness.", "APP-2": "Not selected this round."},
+            )
+        self.assertEqual(outcome["applications"], [
+            {"application_id": "APP-1", "decision": "selected"},
+            {"application_id": "APP-2", "decision": "not_selected"},
+        ])
+        status_updates = [call.args[1] for call in cursor.execute.call_args_list if "UPDATE applications SET status = %s" in call.args[0]]
+        self.assertEqual(status_updates, [("selected", "APP-1"), ("not_selected", "APP-2")])
+        audit_calls = [call for call in cursor.execute.call_args_list if "INSERT INTO final_selection_audit" in call.args[0]]
+        events = [call.args[1][5] for call in audit_calls if len(call.args[1]) > 5]
+        events.extend("final_selection_confirmed" for call in audit_calls if "'final_selection_confirmed'" in call.args[0])
+        self.assertEqual(events, ["application_selected", "application_not_selected", "final_selection_confirmed"])
+        connection.commit.assert_called_once()
+
+    def test_database_final_selection_rejects_ids_outside_shortlist(self):
+        cursor = Mock()
+        cursor.fetchone.return_value = None
+        cursor.fetchall.return_value = [("APP-1", "encrypted-1")]
+        connection = Mock()
+        connection.cursor.return_value = cursor
+        with patch.object(database, "_open_connection", return_value=connection):
+            outcome = database.confirm_challenge_final_selection(
+                "GOV-1", ["APP-2"], "ministry-7", "ministry", "Reason.", {"APP-1": "Reason."}
+            )
+        self.assertIsNone(outcome)
+        self.assertFalse(any("INSERT INTO challenge_final_selections" in call.args[0] for call in cursor.execute.call_args_list))
         connection.rollback.assert_called_once()

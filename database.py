@@ -234,6 +234,53 @@ CREATE TABLE IF NOT EXISTS application_shortlist_audit (
 )
 """
 
+CHALLENGE_FINAL_SELECTIONS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS challenge_final_selections (
+    selection_id VARCHAR(80) NOT NULL PRIMARY KEY,
+    challenge_id VARCHAR(100) NOT NULL UNIQUE,
+    decision_maker VARCHAR(255) NOT NULL,
+    decision_role VARCHAR(30) NOT NULL,
+    reason TEXT NOT NULL,
+    selected_application_ids LONGTEXT NOT NULL,
+    confirmed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_final_selections_decision_maker (decision_maker)
+)
+"""
+
+APPLICATION_FINAL_SELECTION_DECISIONS_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS application_final_selection_decisions (
+    decision_id VARCHAR(80) NOT NULL PRIMARY KEY,
+    selection_id VARCHAR(80) NOT NULL,
+    challenge_id VARCHAR(100) NOT NULL,
+    application_id VARCHAR(80) NOT NULL UNIQUE,
+    business_id_encrypted TEXT NOT NULL,
+    decision VARCHAR(30) NOT NULL,
+    decision_maker VARCHAR(255) NOT NULL,
+    decision_role VARCHAR(30) NOT NULL,
+    reason TEXT NOT NULL,
+    comments TEXT NOT NULL,
+    decided_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_final_selection_challenge (challenge_id),
+    INDEX idx_final_selection_status (decision)
+)
+"""
+
+FINAL_SELECTION_AUDIT_SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS final_selection_audit (
+    audit_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    challenge_id VARCHAR(100) NOT NULL,
+    application_id VARCHAR(80),
+    selection_id VARCHAR(80) NOT NULL,
+    decision_maker VARCHAR(255) NOT NULL,
+    decision_role VARCHAR(30) NOT NULL,
+    event_type VARCHAR(50) NOT NULL,
+    details LONGTEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_final_selection_audit_challenge (challenge_id),
+    INDEX idx_final_selection_audit_application (application_id)
+)
+"""
+
 
 class DuplicateApplicationError(Exception):
     """Raised when a startup attempts to modify an already-submitted application."""
@@ -1350,6 +1397,263 @@ def get_application_shortlist_history(application_id: str) -> dict[str, Any]:
                 "created_at": item[4].isoformat() if item[4] else None,
             })
         return {"decision": decision, "history": history}
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def confirm_challenge_final_selection(
+    challenge_id: str,
+    selected_application_ids: list[str],
+    decision_maker: str,
+    decision_role: str,
+    reason: str,
+    comments_by_application: Mapping[str, str],
+) -> dict[str, Any] | None:
+    """Atomically select chosen shortlisted applications and close the remaining shortlist."""
+    selected_ids = set(selected_application_ids)
+    if not selected_ids:
+        raise ValueError("Select at least one shortlisted application.")
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(CHALLENGE_FINAL_SELECTIONS_SCHEMA_SQL)
+        cursor.execute(APPLICATION_FINAL_SELECTION_DECISIONS_SCHEMA_SQL)
+        cursor.execute(FINAL_SELECTION_AUDIT_SCHEMA_SQL)
+        cursor.execute(
+            "SELECT application_id FROM challenge_final_selections WHERE challenge_id = %s",
+            (challenge_id,),
+        )
+        if cursor.fetchone():
+            connection.rollback()
+            return None
+        cursor.execute(
+            """SELECT application_id, business_id_encrypted FROM applications
+               WHERE challenge_id = %s AND status = 'shortlisted' FOR UPDATE""",
+            (challenge_id,),
+        )
+        candidates = cast(list[tuple[Any, ...]], cursor.fetchall())
+        candidate_ids = {row[0] for row in candidates}
+        if not candidates or not selected_ids.issubset(candidate_ids):
+            connection.rollback()
+            return None
+        if any(not str(comments_by_application.get(application_id, "")).strip() for application_id in candidate_ids):
+            raise ValueError("Add a final decision reason for every shortlisted application.")
+        selection_id = f"FINAL-{uuid.uuid4()}"
+        cursor.execute(
+            """INSERT INTO challenge_final_selections (
+                   selection_id, challenge_id, decision_maker, decision_role, reason, selected_application_ids
+               ) VALUES (%s, %s, %s, %s, %s, %s)""",
+            (selection_id, challenge_id, decision_maker, decision_role, reason, json.dumps(sorted(selected_ids))),
+        )
+        decisions = []
+        for application_id, business_id_encrypted in candidates:
+            decision = "selected" if application_id in selected_ids else "not_selected"
+            comments = str(comments_by_application[application_id]).strip()
+            decision_id = f"FINAL-APP-{uuid.uuid4()}"
+            cursor.execute(
+                """INSERT INTO application_final_selection_decisions (
+                       decision_id, selection_id, challenge_id, application_id, business_id_encrypted,
+                       decision, decision_maker, decision_role, reason, comments
+                   ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    decision_id,
+                    selection_id,
+                    challenge_id,
+                    application_id,
+                    business_id_encrypted,
+                    decision,
+                    decision_maker,
+                    decision_role,
+                    reason,
+                    comments,
+                ),
+            )
+            cursor.execute(
+                "UPDATE applications SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE application_id = %s AND status = 'shortlisted'",
+                (decision, application_id),
+            )
+            if cursor.rowcount != 1:
+                connection.rollback()
+                return None
+            details = {"decision": decision, "reason": reason, "comments": comments}
+            cursor.execute(
+                """INSERT INTO final_selection_audit (
+                       challenge_id, application_id, selection_id, decision_maker,
+                       decision_role, event_type, details
+                   ) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    challenge_id,
+                    application_id,
+                    selection_id,
+                    decision_maker,
+                    decision_role,
+                    "application_selected" if decision == "selected" else "application_not_selected",
+                    json.dumps(details, ensure_ascii=True),
+                ),
+            )
+            decisions.append({"application_id": application_id, "decision": decision})
+        cursor.execute(
+            """INSERT INTO final_selection_audit (
+                   challenge_id, application_id, selection_id, decision_maker,
+                   decision_role, event_type, details
+               ) VALUES (%s, NULL, %s, %s, %s, 'final_selection_confirmed', %s)""",
+            (
+                challenge_id,
+                selection_id,
+                decision_maker,
+                decision_role,
+                json.dumps({"selected_application_ids": sorted(selected_ids), "reason": reason}, ensure_ascii=True),
+            ),
+        )
+        connection.commit()
+        return {"selection_id": selection_id, "applications": decisions}
+    except IntegrityError as error:
+        connection.rollback()
+        if getattr(error, "errno", None) == 1062:
+            return None
+        raise
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def get_application_final_selection(application_id: str) -> dict[str, Any] | None:
+    """Load the final government selection record for an application."""
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(APPLICATION_FINAL_SELECTION_DECISIONS_SCHEMA_SQL)
+        cursor.execute(FINAL_SELECTION_AUDIT_SCHEMA_SQL)
+        cursor.execute(
+            """SELECT d.decision, d.decision_maker, d.decision_role, d.reason, d.comments,
+                      d.decided_at, d.business_id_encrypted, f.confirmed_at
+               FROM application_final_selection_decisions d
+               JOIN challenge_final_selections f ON f.selection_id = d.selection_id
+               WHERE d.application_id = %s""",
+            (application_id,),
+        )
+        row = cast(tuple[Any, ...] | None, cursor.fetchone())
+        if not row:
+            return None
+        cursor.execute(
+            """SELECT event_type, decision_maker, decision_role, details, created_at
+               FROM final_selection_audit WHERE application_id = %s OR
+                 (application_id IS NULL AND selection_id = (
+                    SELECT selection_id FROM application_final_selection_decisions WHERE application_id = %s
+                 )) ORDER BY audit_id""",
+            (application_id, application_id),
+        )
+        history = []
+        for item in cast(list[tuple[Any, ...]], cursor.fetchall()):
+            try:
+                details = json.loads(item[3])
+            except (TypeError, json.JSONDecodeError):
+                details = {}
+            history.append({
+                "event_type": item[0],
+                "decision_maker": item[1],
+                "decision_role": item[2],
+                "details": details,
+                "created_at": item[4].isoformat() if item[4] else None,
+            })
+        return {
+            "decision": row[0],
+            "decision_maker": row[1],
+            "decision_role": row[2],
+            "reason": row[3],
+            "comments": row[4],
+            "decided_at": row[5].isoformat() if row[5] else None,
+            "selected_business_id": _cipher().decrypt(row[6].encode()).decode(),
+            "confirmed_at": row[7].isoformat() if row[7] else None,
+            "history": history,
+        }
+    finally:
+        cursor.close()
+        connection.close()
+
+
+def get_challenge_final_selection(challenge_id: str) -> dict[str, Any] | None:
+    """Load a confirmed challenge decision with selected and non-selected outcomes."""
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(CHALLENGE_FINAL_SELECTIONS_SCHEMA_SQL)
+        cursor.execute(APPLICATION_FINAL_SELECTION_DECISIONS_SCHEMA_SQL)
+        cursor.execute(FINAL_SELECTION_AUDIT_SCHEMA_SQL)
+        cursor.execute(
+            """SELECT selection_id, decision_maker, decision_role, reason,
+                      selected_application_ids, confirmed_at
+               FROM challenge_final_selections WHERE challenge_id = %s""",
+            (challenge_id,),
+        )
+        row = cast(tuple[Any, ...] | None, cursor.fetchone())
+        if not row:
+            return None
+        try:
+            selected_ids = json.loads(row[4])
+        except (TypeError, json.JSONDecodeError):
+            selected_ids = []
+        selection_id = row[0]
+        cursor.execute(
+            """SELECT d.application_id, d.business_id_encrypted, r.business_name,
+                      d.decision, d.decision_maker, d.decision_role, d.reason,
+                      d.comments, d.decided_at, e.total_score, e.maximum_total_score
+               FROM application_final_selection_decisions d
+               LEFT JOIN startup_registrations r ON r.business_id_hash = (
+                   SELECT business_id_hash FROM applications WHERE application_id = d.application_id
+               )
+               LEFT JOIN application_evaluations e ON e.application_id = d.application_id
+               WHERE d.selection_id = %s ORDER BY d.decided_at, d.application_id""",
+            (selection_id,),
+        )
+        decisions = []
+        for item in cast(list[tuple[Any, ...]], cursor.fetchall()):
+            decisions.append({
+                "application_id": item[0],
+                "business_id": _cipher().decrypt(item[1].encode()).decode(),
+                "startup_name": item[2] or "Startup",
+                "decision": item[3],
+                "decision_maker": item[4],
+                "decision_role": item[5],
+                "reason": item[6],
+                "comments": item[7],
+                "decided_at": item[8].isoformat() if item[8] else None,
+                "total_score": float(item[9]),
+                "maximum_total_score": float(item[10]),
+            })
+        cursor.execute(
+            """SELECT application_id, event_type, decision_maker, decision_role, details, created_at
+               FROM final_selection_audit WHERE selection_id = %s ORDER BY audit_id""",
+            (selection_id,),
+        )
+        audit = []
+        for item in cast(list[tuple[Any, ...]], cursor.fetchall()):
+            try:
+                details = json.loads(item[4])
+            except (TypeError, json.JSONDecodeError):
+                details = {}
+            audit.append({
+                "application_id": item[0],
+                "event_type": item[1],
+                "decision_maker": item[2],
+                "decision_role": item[3],
+                "details": details,
+                "created_at": item[5].isoformat() if item[5] else None,
+            })
+        return {
+            "selection_id": selection_id,
+            "decision_maker": row[1],
+            "decision_role": row[2],
+            "reason": row[3],
+            "selected_application_ids": selected_ids,
+            "confirmed_at": row[5].isoformat() if row[5] else None,
+            "applications": decisions,
+            "audit": audit,
+        }
     finally:
         cursor.close()
         connection.close()
