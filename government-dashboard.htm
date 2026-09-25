@@ -4,8 +4,7 @@
 <main class="container dashboard-shell">
     <section class="dashboard-header">
         <div>
-            <div class="kicker">Government workspace</div>
-            <h1>My Challenges</h1>
+            <h1>All Contracts</h1>
         </div>
         <div class="hero-actions">
             <a class="button outline" href="/periodic-checks">Periodic checks</a>
@@ -53,8 +52,8 @@
                 <div class="card-actions">
                     <a href="/create-challenge?draft={{ challenge.challengeId or challenge.id }}">Continue Editing</a>
                     <a href="/create-challenge?preview={{ challenge.challengeId or challenge.id }}">Preview</a>
-                    <a class="link-button" href="/government-dashboard/{{ challenge.challengeId or challenge.id }}/applications">Applications</a>
-                    <a class="link-button" href="/periodic-checks#check-{{ challenge.challengeId or challenge.id }}">Periodic checks</a>
+                    <a href="/government-evaluation/{{ challenge.challengeId or challenge.id }}">Initial Evaluation</a>
+                    <button class="link-button" type="button" data-open-schedule="{{ challenge.challengeId or challenge.id }}">Schedule Check</button>
                 </div>
                 <form class="bidding-control" data-bidding-form="{{ challenge.challengeId or challenge.id }}">
                     <strong>Bidding control</strong>
