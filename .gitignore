@@ -2,7 +2,8 @@
 .vscode/
 
 # Local test files
-/tests/
+/tests/*
+!/tests/test_application_flow.py
 
 # Python bytecode and caches
 __pycache__/
