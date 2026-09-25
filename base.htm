@@ -19,9 +19,6 @@
             <a href="/directory">Startup directory</a>
             <a href="/how-it-works">How it works</a>
             <a href="/public-challenges">Public challenges</a>
-            {% if session.get("role") in ["startup", "ministry", "government"] %}
-            <a href="/login">Switch account</a>
-            {% endif %}
         </nav>
         <div class="nav-actions">
             {% if session.get("role") not in ["startup", "ministry", "government"] %}

@@ -1,0 +1,56 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Challenge applications · {{ challenge.challengeId }}</div>
+            <h1>{{ challenge.title }}</h1>
+            <p class="dashboard-subtitle">Review submitted applications and record eligibility decisions.</p>
+        </div>
+        <div class="hero-actions">
+            <a class="button outline" href="/government-dashboard">Back to challenges</a>
+            <a class="button" href="/government-dashboard/{{ challenge.challengeId }}/comparison">Evaluation comparison</a>
+        </div>
+    </section>
+
+    <nav class="hero-actions application-filters" aria-label="Filter applications">
+        {% for value, label in [('all', 'All'), ('submitted', 'Submitted'), ('eligible', 'Eligible'), ('ineligible', 'Ineligible'), ('clarification_requested', 'Clarification Requested')] %}
+        <a class="button {{ '' if status_filter == value else 'outline' }} small" href="?status={{ value }}" {% if status_filter == value %}aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
+    </nav>
+
+    <section class="challenge-panel">
+        <div class="panel-head">
+            <h2>Applications</h2>
+            <span class="form-note">{{ applications | length }} shown · records from MySQL</span>
+        </div>
+        {% if applications %}
+        <div class="challenge-list">
+            {% for application in applications %}
+            <article class="challenge-card application-review-card">
+                <div class="challenge-card-top">
+                    <div>
+                        <span class="challenge-id">{{ application.application_id }}</span>
+                        <h3>{{ application.startup_name }}</h3>
+                    </div>
+                    <span class="status-badge {{ application.status | replace('_', '-') }}">{{ application.status | replace('_', ' ') | title }}</span>
+                </div>
+                <div class="challenge-meta">
+                    <span>Submitted {{ application.submitted_at or 'Not available' }}</span>
+                    <span>Eligibility: {{ application.eligibility_status }}</span>
+                    <span>Evaluation: {{ application.evaluation_status }}</span>
+                    <span>Updated {{ application.updated_at or 'Not available' }}</span>
+                </div>
+                <div class="card-actions">
+                    <a class="button small" href="/government-applications/{{ application.application_id }}">Open application &amp; screen eligibility</a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state"><p>No applications match this filter.</p></div>
+        {% endif %}
+    </section>
+</main>
+{% endblock %}

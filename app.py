@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 from datetime import timedelta
@@ -16,7 +17,19 @@ from database import (
     count_challenge_applications,
     get_startup_profile,
     get_startup_application,
+    get_startup_clarification_request,
     get_government_application,
+    get_application_screening,
+    start_application_screening,
+    save_application_screening,
+    finalize_application_screening,
+    start_application_evaluation,
+    get_application_evaluation,
+    save_application_evaluation,
+    complete_application_evaluation,
+    list_challenge_evaluation_comparison,
+    record_application_shortlist_decision,
+    get_application_shortlist_history,
     get_application,
     list_challenge_applications,
     list_startup_applications,
@@ -427,6 +440,95 @@ REQUIRED_APPLICATION_FIELDS = {
     "target_users",
     "measurable_impact",
 }
+
+
+def _eligibility_requirements(challenge):
+    eligibility = challenge.get("eligibility") or {}
+    if not isinstance(eligibility, dict):
+        return []
+    requirements = []
+    participant_types = eligibility.get("participantTypes") or []
+    if isinstance(participant_types, str):
+        participant_types = [participant_types]
+    if participant_types:
+        requirements.append("Eligible participant types: " + ", ".join(str(value) for value in participant_types))
+    minimum = str(eligibility.get("minTeamSize") or "").strip()
+    maximum = str(eligibility.get("maxTeamSize") or "").strip()
+    if minimum or maximum:
+        requirements.append(f"Team size: {minimum or 'any'} to {maximum or 'any'}")
+    skills = eligibility.get("requiredSkills") or []
+    if isinstance(skills, str):
+        skills = [skills]
+    if skills:
+        requirements.append("Required skills: " + ", ".join(str(value) for value in skills))
+    known = {"participantTypes", "minTeamSize", "maxTeamSize", "requiredSkills"}
+    for key, value in eligibility.items():
+        if key in known or value in (None, "", [], {}):
+            continue
+        rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else json.dumps(value, ensure_ascii=True) if isinstance(value, dict) else str(value)
+        label = " ".join(part.capitalize() for part in str(key).replace("_", " ").split())
+        requirements.append(f"{label}: {rendered}")
+    return requirements
+
+
+def _application_status_fields(application):
+    status = application.get("status", "submitted")
+    eligible_statuses = {"eligible", "under_evaluation", "evaluation_complete", "shortlisted", "not_selected", "selected"}
+    eligibility_status = "Eligible" if status in eligible_statuses else {
+        "ineligible": "Ineligible",
+        "clarification_requested": "Clarification Requested",
+    }.get(status, "Pending")
+    evaluation_status = {
+        "under_evaluation": "Under Evaluation",
+        "evaluation_complete": "Evaluation Complete",
+        "shortlisted": "Evaluation Complete",
+        "not_selected": "Evaluation Complete",
+    }.get(status, "Not Started" if status == "eligible" else "Locked" if status == "ineligible" else "Not Started")
+    return {**application, "eligibility_status": eligibility_status, "evaluation_status": evaluation_status}
+
+
+def _evaluation_criteria(challenge):
+    raw_criteria = challenge.get("evaluationCriteria")
+    if not isinstance(raw_criteria, list) or not raw_criteria:
+        raw_criteria = [
+            {"criterion": "Problem Relevance", "description": "Fit to the published problem", "weight": 20, "maximumScore": 5},
+            {"criterion": "Technical Feasibility", "description": "Technical viability and risks", "weight": 20, "maximumScore": 5},
+            {"criterion": "Innovation", "description": "Novelty and differentiation", "weight": 15, "maximumScore": 5},
+            {"criterion": "Implementation Approach", "description": "Delivery plan and practicality", "weight": 15, "maximumScore": 5},
+            {"criterion": "Team Capability", "description": "Relevant capability and experience", "weight": 10, "maximumScore": 5},
+            {"criterion": "Expected Impact", "description": "Expected public value", "weight": 10, "maximumScore": 5},
+            {"criterion": "Scalability", "description": "Potential to scale", "weight": 10, "maximumScore": 5},
+        ]
+    criteria = []
+    seen = set()
+    for item in raw_criteria:
+        if not isinstance(item, dict):
+            raise ValueError("Every evaluation criterion must be a structured object.")
+        name = str(item.get("criterion") or "").strip()
+        if not name:
+            raise ValueError("Every evaluation criterion needs a name.")
+        if name.casefold() in seen:
+            raise ValueError("Evaluation criterion names must be unique.")
+        seen.add(name.casefold())
+        maximum_raw = item.get("maximumScore", item.get("maxScore", item.get("maximum_score", 100)))
+        weight_raw = item.get("weight", maximum_raw)
+        try:
+            maximum_score = float(maximum_raw)
+            weight = float(weight_raw)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Criterion {name} must have numeric maximum and weight values.") from error
+        if not math.isfinite(maximum_score) or maximum_score <= 0 or not math.isfinite(weight) or weight <= 0:
+            raise ValueError(f"Criterion {name} must have positive maximum and weight values.")
+        required_value = item.get("required", item.get("isRequired", True))
+        required = not (required_value is False or str(required_value).strip().casefold() in {"false", "no", "0", "optional"})
+        criteria.append({
+            "criterion": name,
+            "description": str(item.get("description") or ""),
+            "maximum_score": maximum_score,
+            "weight": weight,
+            "required": required,
+        })
+    return criteria
 
 
 def _startup_is_eligible(challenge, profile):
@@ -842,6 +944,12 @@ def public_challenges_api():
 @session_required("ministry")
 def government_dashboard():
     return render_template("government-dashboard.htm", challenges=_serialize_challenges())
+
+
+@app.get("/periodic-checks")
+@session_required("ministry")
+def government_periodic_checks():
+    return render_template("periodic-checks.htm", challenges=_serialize_challenges())
 
 
 @app.get("/create-challenge")
@@ -1299,13 +1407,18 @@ def start_contract_application(contract_id):
         return ("Startup profile not found", 404)
     try:
         application = get_startup_application(contract["id"], session["business_id"])
+        clarification_requirements = (
+            get_startup_clarification_request(application["application_id"], session["business_id"])
+            if application and application.get("status") == "clarification_requested"
+            else []
+        )
     except Exception:
         app.logger.exception("Could not load the startup's application for %s.", contract_id)
         return ("Applications are temporarily unavailable.", 503)
     closed = contract.get("status") != "start bidding"
     if closed and not application:
-        return render_template("application-start.htm", contract=contract, profile=profile, application=None, closed=True)
-    return render_template("application-start.htm", contract=contract, profile=profile, application=application, closed=closed)
+        return render_template("application-start.htm", contract=contract, profile=profile, application=None, closed=True, clarification_requirements=[])
+    return render_template("application-start.htm", contract=contract, profile=profile, application=application, closed=closed, clarification_requirements=clarification_requirements)
 
 
 @app.post("/api/challenges/<challenge_id>/applications")
@@ -1412,11 +1525,115 @@ def government_challenge_applications_api(challenge_id):
     if challenge.get("createdBy") != session.get("ministry_id"):
         return jsonify({"ok": False, "message": "You are not authorized to view applications for this challenge."}), 403
     try:
-        applications = list_challenge_applications(challenge_id)
+        applications = [_application_status_fields(item) for item in list_challenge_applications(challenge_id)]
         return jsonify({"ok": True, "count": len(applications), "applications": applications})
     except Exception:
         app.logger.exception("Could not load government applications for %s.", challenge_id)
         return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+
+
+@app.get("/government-dashboard/<challenge_id>/applications")
+@session_required("ministry")
+def government_challenge_applications_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to view applications for this challenge.", 403)
+    status_filter = request.args.get("status", "all")
+    allowed_filters = {"all", "submitted", "eligible", "ineligible", "clarification_requested"}
+    if status_filter not in allowed_filters:
+        status_filter = "all"
+    try:
+        applications = [_application_status_fields(item) for item in list_challenge_applications(challenge_id)]
+    except Exception:
+        app.logger.exception("Could not load applications for ministry challenge %s.", challenge_id)
+        return ("Applications are temporarily unavailable.", 503)
+    if status_filter == "eligible":
+        applications = [item for item in applications if item.get("eligibility_status") == "Eligible"]
+    elif status_filter == "ineligible":
+        applications = [item for item in applications if item.get("eligibility_status") == "Ineligible"]
+    elif status_filter == "clarification_requested":
+        applications = [item for item in applications if item.get("eligibility_status") == "Clarification Requested"]
+    elif status_filter == "submitted":
+        applications = [item for item in applications if item.get("status") == "submitted"]
+    return render_template(
+        "challenge-applications.htm",
+        challenge=challenge,
+        applications=applications,
+        status_filter=status_filter,
+    )
+
+
+@app.get("/government-dashboard/<challenge_id>/comparison")
+@session_required("ministry")
+def government_challenge_comparison_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to compare applications for this challenge.", 403)
+    try:
+        applications = list_challenge_evaluation_comparison(challenge_id)
+    except Exception:
+        app.logger.exception("Could not load evaluation comparison for challenge %s.", challenge_id)
+        return ("Evaluation comparison is temporarily unavailable.", 503)
+    return render_template("challenge-comparison.htm", challenge=challenge, applications=applications)
+
+
+@app.get("/government-applications/<application_id>")
+@session_required("ministry")
+def government_application_detail(application_id):
+    try:
+        application = get_government_application(application_id)
+    except Exception:
+        app.logger.exception("Could not load ministry application %s.", application_id)
+        return ("Applications are temporarily unavailable.", 503)
+    if not application:
+        return ("Application not found", 404)
+    challenge = _challenge_by_id(application["challenge_id"])
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to view this application.", 403)
+    try:
+        profile = get_startup_profile(application["business_id"])
+        screening = get_application_screening(application_id)
+        evaluation = get_application_evaluation(application_id)
+        shortlist = get_application_shortlist_history(application_id)
+    except Exception:
+        app.logger.exception("Could not load review details for application %s.", application_id)
+        return ("Application review is temporarily unavailable.", 503)
+    requirements = _eligibility_requirements(challenge)
+    saved_by_requirement = {item["requirement"]: item for item in screening["requirements"]}
+    requirements = [{"requirement": value, **saved_by_requirement.get(value, {})} for value in requirements]
+    try:
+        evaluation_criteria = evaluation["criteria"] if evaluation else _evaluation_criteria(challenge) if application.get("status") == "eligible" else []
+    except ValueError as error:
+        return (str(error), 400)
+    return render_template(
+        "government-application-detail.htm",
+        application=_application_status_fields(application),
+        challenge=challenge,
+        profile=profile,
+        requirements=requirements,
+        audit=screening["audit"],
+        evaluation=evaluation,
+        evaluation_criteria=evaluation_criteria,
+        shortlist=shortlist,
+    )
+
+
+def _government_application_access(application_id):
+    application = get_government_application(application_id)
+    if not application:
+        return None, None, (jsonify({"ok": False, "message": "Application not found."}), 404)
+    challenge = _challenge_by_id(application["challenge_id"])
+    if not challenge:
+        return None, None, (jsonify({"ok": False, "message": "Challenge not found."}), 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return None, None, (jsonify({"ok": False, "message": "You are not authorized to view this application."}), 403)
+    return application, challenge, None
 
 
 @app.get("/api/government/applications/<application_id>")
@@ -1425,18 +1642,254 @@ def government_application_api(application_id):
     if auth_error is not None:
         return auth_error
     try:
-        application = get_government_application(application_id)
+        application, _challenge, access_error = _government_application_access(application_id)
     except Exception:
         app.logger.exception("Could not load government application %s.", application_id)
         return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
-    if not application:
-        return jsonify({"ok": False, "message": "Application not found."}), 404
-    challenge = _challenge_by_id(application["challenge_id"])
-    if not challenge:
-        return jsonify({"ok": False, "message": "Challenge not found."}), 404
-    if challenge.get("createdBy") != session.get("ministry_id"):
-        return jsonify({"ok": False, "message": "You are not authorized to view this application."}), 403
-    return jsonify({"ok": True, "application": application})
+    if access_error:
+        return access_error
+    try:
+        screening = get_application_screening(application_id)
+        evaluation = get_application_evaluation(application_id)
+        shortlist = get_application_shortlist_history(application_id)
+    except Exception:
+        app.logger.exception("Could not load review history for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Application review is temporarily unavailable."}), 503
+    return jsonify({"ok": True, "application": _application_status_fields(application), "screening": screening, "evaluation": evaluation, "shortlist": shortlist})
+
+
+@app.post("/api/government/applications/<application_id>/screening/start")
+def start_government_application_screening(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        started = start_application_screening(application_id, session["ministry_id"], "ministry")
+    except Exception:
+        app.logger.exception("Could not start screening for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Application screening is temporarily unavailable."}), 503
+    if not started:
+        return jsonify({"ok": False, "message": "This application is not available for screening."}), 409
+    return jsonify({"ok": True, "application_id": application["application_id"], "message": "Eligibility screening started."})
+
+
+@app.post("/api/government/applications/<application_id>/screening")
+def save_government_application_screening(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+    except Exception:
+        app.logger.exception("Could not load application %s for screening.", application_id)
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+    if application.get("status") != "submitted":
+        return jsonify({"ok": False, "message": "Only submitted applications can be screened."}), 409
+    payload = request.get_json(silent=True) or {}
+    raw_requirements = payload.get("requirements")
+    expected_requirements = _eligibility_requirements(challenge)
+    if not isinstance(raw_requirements, list) or not expected_requirements:
+        return jsonify({"ok": False, "message": "Eligibility requirements are required for screening."}), 400
+    if not raw_requirements:
+        return jsonify({"ok": False, "message": "Record at least one requirement decision before saving screening."}), 400
+    decisions = []
+    seen = set()
+    allowed_decisions = {"pass", "fail", "needs_clarification"}
+    for item in raw_requirements:
+        if not isinstance(item, dict):
+            return jsonify({"ok": False, "message": "Each screening result must be an object."}), 400
+        requirement = str(item.get("requirement") or "").strip()
+        decision = str(item.get("decision") or "").strip().lower()
+        comment = str(item.get("comment") or "").strip()
+        if requirement not in expected_requirements or requirement in seen:
+            return jsonify({"ok": False, "message": "A screening requirement is invalid or duplicated."}), 400
+        if decision not in allowed_decisions:
+            return jsonify({"ok": False, "message": "Choose Pass, Fail, or Needs Clarification for each requirement."}), 400
+        if len(comment) > 4000:
+            return jsonify({"ok": False, "message": "A reviewer comment exceeds the 4,000 character limit."}), 400
+        seen.add(requirement)
+        decisions.append({"requirement": requirement, "decision": decision, "comment": comment})
+
+    action = str(payload.get("action") or "save").strip().lower()
+    if action not in {"save", "eligible", "ineligible", "clarification_requested"}:
+        return jsonify({"ok": False, "message": "Choose Save, Eligible, Ineligible, or Request Clarification."}), 400
+    if action != "save":
+        if seen != set(expected_requirements):
+            return jsonify({"ok": False, "message": "Review every eligibility requirement before making a final decision."}), 400
+        outcomes = {item["decision"] for item in decisions}
+        if action == "eligible" and outcomes != {"pass"}:
+            return jsonify({"ok": False, "message": "Mark every requirement Pass before approving eligibility."}), 400
+        if action == "ineligible" and "fail" not in outcomes:
+            return jsonify({"ok": False, "message": "Mark at least one requirement Fail before rejecting eligibility."}), 400
+        if action == "clarification_requested" and "needs_clarification" not in outcomes:
+            return jsonify({"ok": False, "message": "Mark at least one requirement Needs Clarification."}), 400
+        if action == "clarification_requested" and any(
+            item["decision"] == "needs_clarification" and not item["comment"] for item in decisions
+        ):
+            return jsonify({"ok": False, "message": "Add a reviewer comment for each clarification request."}), 400
+        if action == "ineligible" and "needs_clarification" in outcomes:
+            return jsonify({"ok": False, "message": "Resolve clarification requirements before rejecting eligibility."}), 400
+    try:
+        save_application_screening(application_id, session["ministry_id"], "ministry", decisions)
+        if action != "save":
+            finalized = finalize_application_screening(
+                application_id,
+                session["ministry_id"],
+                "ministry",
+                action,
+                {"requirements_reviewed": len(decisions)},
+            )
+            if not finalized:
+                return jsonify({"ok": False, "message": "Application status changed; reload before deciding eligibility."}), 409
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 409
+    except Exception:
+        app.logger.exception("Could not save screening for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Screening could not be saved. Please try again."}), 503
+    return jsonify({"ok": True, "message": "Screening saved." if action == "save" else "Eligibility decision recorded."})
+
+
+@app.post("/api/government/applications/<application_id>/evaluation/start")
+def start_government_application_evaluation(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        if application.get("status") != "eligible":
+            return jsonify({"ok": False, "message": "Only eligible applications can start evaluation.", "status": application.get("status")}), 409
+        criteria = _evaluation_criteria(challenge)
+        started = start_application_evaluation(application_id, session["ministry_id"], "ministry", criteria)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not enter evaluation for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation status could not be updated."}), 503
+    if not started:
+        message = "Only eligible applications can enter evaluation."
+        return jsonify({"ok": False, "message": message, "status": application.get("status")}), 409
+    return jsonify({"ok": True, "message": "Evaluation started."})
+
+
+@app.post("/api/government/applications/<application_id>/evaluation")
+def save_government_application_evaluation(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        if application.get("status") != "under_evaluation":
+            return jsonify({"ok": False, "message": "Only applications under evaluation can be edited."}), 409
+        evaluation = get_application_evaluation(application_id)
+    except Exception:
+        app.logger.exception("Could not load evaluation %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation is temporarily unavailable."}), 503
+    if not evaluation or evaluation.get("status") != "in_progress":
+        return jsonify({"ok": False, "message": "No active evaluation scorecard exists."}), 409
+    raw_criteria = (request.get_json(silent=True) or {}).get("criteria")
+    if not isinstance(raw_criteria, list) or not raw_criteria:
+        return jsonify({"ok": False, "message": "Evaluation criteria are required."}), 400
+    expected = {item["criterion"]: item for item in evaluation["criteria"]}
+    seen = set()
+    scores = []
+    for item in raw_criteria:
+        if not isinstance(item, dict):
+            return jsonify({"ok": False, "message": "Each evaluation result must be an object."}), 400
+        name = str(item.get("criterion") or "").strip()
+        if name not in expected or name in seen:
+            return jsonify({"ok": False, "message": "An evaluation criterion is invalid or duplicated."}), 400
+        seen.add(name)
+        raw_score = item.get("score")
+        score = None if raw_score in (None, "") else raw_score
+        if score is not None:
+            try:
+                score = float(score)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "message": f"Score for {name} must be a number."}), 400
+            if not math.isfinite(score) or score < 0 or score > expected[name]["maximum_score"]:
+                return jsonify({"ok": False, "message": f"Score for {name} must be between 0 and {expected[name]['maximum_score']}."}), 400
+        comment = str(item.get("comment") or "").strip()
+        if len(comment) > 4000:
+            return jsonify({"ok": False, "message": "An evaluation comment exceeds the 4,000 character limit."}), 400
+        scores.append({"criterion": name, "score": score, "comment": comment})
+    try:
+        totals = save_application_evaluation(application_id, session["ministry_id"], "ministry", scores)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not save evaluation for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation could not be saved."}), 503
+    return jsonify({"ok": True, "message": "Evaluation saved.", **totals})
+
+
+@app.post("/api/government/applications/<application_id>/evaluation/complete")
+def complete_government_application_evaluation(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        if application.get("status") != "under_evaluation":
+            return jsonify({"ok": False, "message": "Only applications under evaluation can be completed."}), 409
+        totals = complete_application_evaluation(application_id, session["ministry_id"], "ministry")
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 409
+    except Exception:
+        app.logger.exception("Could not complete evaluation for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation could not be completed."}), 503
+    return jsonify({"ok": True, "message": "Evaluation completed.", **totals})
+
+
+@app.post("/api/government/applications/<application_id>/shortlist")
+def decide_government_application_shortlist(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+    except Exception:
+        app.logger.exception("Could not load application %s for shortlist decision.", application_id)
+        return jsonify({"ok": False, "message": "Application is temporarily unavailable."}), 503
+    if application.get("status") != "evaluation_complete":
+        return jsonify({"ok": False, "message": "Only applications with completed evaluation can be decided."}), 409
+    payload = request.get_json(silent=True) or {}
+    decision = str(payload.get("decision") or "").strip().lower()
+    if decision not in {"shortlisted", "not_selected"}:
+        return jsonify({"ok": False, "message": "Choose Shortlisted or Not Selected."}), 400
+    comments = str(payload.get("comments") or "").strip()
+    if not comments:
+        return jsonify({"ok": False, "message": "Add a reason for this shortlist decision."}), 400
+    if len(comments) > 4000:
+        return jsonify({"ok": False, "message": "The decision reason exceeds the 4,000 character limit."}), 400
+    try:
+        recorded = record_application_shortlist_decision(
+            application_id,
+            decision,
+            session["ministry_id"],
+            "ministry",
+            comments,
+        )
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not record shortlist decision for %s.", application_id)
+        return jsonify({"ok": False, "message": "The shortlist decision could not be saved."}), 503
+    if not recorded:
+        return jsonify({"ok": False, "message": "Only evaluation-complete applications can receive a shortlist decision."}), 409
+    return jsonify({"ok": True, "decision": decision, "message": "Shortlist decision recorded."})
 
 
 @app.post("/api/contracts/<contract_id>/bids")
@@ -1476,7 +1929,7 @@ def submit_contract_bid(contract_id):
 @app.get("/ministry-portal")
 @session_required("ministry")
 def ministry_portal():
-    return render_template("ministry-portal.htm")
+    return render_template("ministry-portal.htm", challenges=_serialize_challenges())
 
 
 @app.get("/api/network")

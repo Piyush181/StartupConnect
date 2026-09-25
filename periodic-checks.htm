@@ -1,0 +1,120 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Government workspace</div>
+            <h1>Periodic checks</h1>
+            <p class="dashboard-subtitle">Schedule startup progress reports and review submissions separately from challenge creation.</p>
+        </div>
+        <a class="button outline" href="/government-dashboard">Back to challenges</a>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Reporting schedules</h2></div>
+        {% if challenges %}
+        <div class="challenge-list">
+            {% for challenge in challenges %}
+            <article class="challenge-card" id="check-{{ challenge.challengeId or challenge.id }}">
+                <div class="challenge-card-top">
+                    <div>
+                        <span class="challenge-id">{{ challenge.challengeId or 'GOV-00000' }}</span>
+                        <h3>{{ challenge.title or 'Untitled challenge' }}</h3>
+                    </div>
+                    <span class="status-badge {{ challenge.status | lower }}">{{ challenge.status or 'Draft' }}</span>
+                </div>
+                <div class="challenge-meta">
+                    <span>{{ challenge.department or 'Department' }}</span>
+                    <span>{{ challenge.updatedAt[:10] if challenge.updatedAt else '—' }}</span>
+                </div>
+                <form class="periodic-schedule" data-schedule-form="{{ challenge.challengeId or challenge.id }}">
+                    <label>Report phase title <input name="title" value="Periodic progress report" required></label>
+                    <label>Frequency <select name="frequency"><option>Monthly</option><option>Quarterly</option><option>Milestone-based</option></select></label>
+                    <label>First report due <input name="dueDate" type="date" required></label>
+                    <label class="full-field">Notification to startups <textarea name="notification" rows="2">Please submit your progress report, evidence, metrics, and blockers by the due date.</textarea></label>
+                    <button class="button small" type="submit">Send Notification &amp; Schedule</button>
+                    <span class="form-message" data-schedule-status role="status"></span>
+                </form>
+                {% if challenge.periodicChecks %}
+                <div class="dashboard-progress-list" aria-label="Scheduled checks">
+                    {% for check in challenge.periodicChecks %}
+                    <span>{{ check.title }} · {{ check.frequency }} · Due {{ check.dueDate }} · {{ check.status }}</span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="form-note">No reporting checks are scheduled for this challenge.</p>
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state"><p>Create a challenge before scheduling periodic reports.</p><a class="button" href="/create-challenge">Create New Challenge</a></div>
+        {% endif %}
+    </section>
+
+    <section class="challenge-panel periodic-review-panel">
+        <div class="panel-head">
+            <h2>Startup reports</h2>
+            <span class="form-note">Review submitted progress reports</span>
+        </div>
+        <div id="periodic-reports" class="report-review-list"><p class="form-note">Loading reports...</p></div>
+    </section>
+</main>
+
+<script>
+    const reportList = document.getElementById('periodic-reports');
+
+    document.querySelectorAll('[data-schedule-form]').forEach(form => {
+        form.onsubmit = async event => {
+            event.preventDefault();
+            const status = form.querySelector('[data-schedule-status]');
+            const response = await fetch(`/api/challenges/${form.dataset.scheduleForm}/periodic-checks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.fromEntries(new FormData(form)))
+            });
+            const result = await response.json();
+            status.textContent = result.message;
+            if (response.ok) window.location.reload();
+        };
+    });
+
+    async function loadReports() {
+        const response = await fetch('/api/periodic-reports');
+        const result = await response.json();
+        if (!response.ok || !result.reports.length) {
+            reportList.innerHTML = '<p class="form-note">No startup reports are waiting for review.</p>';
+            return;
+        }
+        reportList.innerHTML = result.reports.map(item => {
+            const report = item.report;
+            const reviewControls = report.status === 'Submitted for Government Review'
+                ? `<form class="report-review-form" data-report-id="${report.reportId}">
+                    <select name="decision"><option>Accepted</option><option>Changes Requested</option></select>
+                    <input name="feedback" placeholder="Feedback for the startup">
+                    <button class="button small" type="submit">Save Review</button>
+                </form>`
+                : `<span class="status-badge">${report.status}</span>`;
+            return `<article class="report-review-card">
+                <div><strong>${report.challengeId}</strong><h3>${item.challengeTitle}</h3><p>${report.summary}</p></div>
+                <div class="report-meta"><span>${report.startupId}</span><span>${report.submittedAt}</span><span>${report.status}</span></div>
+                ${report.progress ? `<p><strong>Progress:</strong> ${report.progress}</p>` : ''}
+                ${report.blockers ? `<p><strong>Blockers:</strong> ${report.blockers}</p>` : ''}
+                ${reviewControls}
+            </article>`;
+        }).join('');
+        document.querySelectorAll('.report-review-form').forEach(form => {
+            form.onsubmit = async event => {
+                event.preventDefault();
+                const response = await fetch(`/api/periodic-reports/${form.dataset.reportId}/review`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(form)))
+                });
+                if (response.ok) loadReports();
+            };
+        });
+    }
+
+    loadReports();
+</script>
+{% endblock %}

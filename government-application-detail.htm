@@ -1,0 +1,271 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell government-application-detail">
+    <a class="back-link" href="/government-dashboard/{{ challenge.challengeId }}/applications">← Back to applications</a>
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Application · {{ application.application_id }}</div>
+            <h1>{{ profile.business_name if profile else application.startup_name }}</h1>
+            <p class="dashboard-subtitle">{{ challenge.title }} · Submitted {{ application.submitted_at or 'Not available' }}</p>
+        </div>
+        <div class="application-status-summary">
+            <span class="status-badge {{ application.status | replace('_', '-') }}">{{ application.status | replace('_', ' ') | title }}</span>
+            <span>Eligibility: {{ application.eligibility_status }}</span>
+            <span>Evaluation: {{ application.evaluation_status }}</span>
+        </div>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Startup information</h2></div>
+        <div class="public-detail-grid">
+            <section><h3>Startup</h3><p>{{ profile.business_name if profile else application.startup_name }}</p><p>{{ profile.business_id if profile else application.business_id }}</p></section>
+            <section><h3>Sector and domain</h3><p>{{ profile.sector if profile else 'Not provided' }}</p><p>{{ profile.domain if profile else '' }}</p></section>
+            <section><h3>Product stage</h3><p>{{ profile.current_stage if profile else application.application_data.get('development_stage', 'Not provided') }}</p></section>
+            {% if profile %}<section><h3>Contact</h3><p>{{ profile.company_email }}</p><p>{{ profile.company_phone }}</p></section>{% endif %}
+        </div>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Submitted solution</h2></div>
+        {% set answers = application.application_data %}
+        <div class="public-detail-grid">
+            <section><h3>Problem understanding</h3><p>{{ answers.get('problem_addressed', '') }}</p><p>{{ answers.get('challenge_solution', '') }}</p></section>
+            <section><h3>Proposed solution</h3><p>{{ answers.get('solution_description', '') }}</p></section>
+            <section><h3>Technology / approach</h3><p>{{ answers.get('technology_approach', '') }}</p></section>
+            <section><h3>Product stage</h3><p>{{ answers.get('development_stage', '') }}</p></section>
+            <section><h3>Implementation</h3><p>{{ answers.get('implementation_approach', '') }}</p></section>
+            <section><h3>Timeline</h3><p>{{ answers.get('expected_timeline', '') }}</p></section>
+            <section><h3>Expected outcomes</h3><p>{{ answers.get('expected_outcomes', '') }}</p><p>{{ answers.get('measurable_impact', '') }}</p></section>
+            <section><h3>Beneficiaries</h3><p>{{ answers.get('target_users', '') }}</p></section>
+            <section><h3>Previous experience</h3><p>{{ answers.get('previous_deployments', '') }}</p><p>{{ answers.get('relevant_experience', '') }}</p></section>
+            <section><h3>Government support required</h3><p>{{ answers.get('government_support', '') }}</p></section>
+            <section><h3>Evidence / links</h3><p>{{ answers.get('supporting_evidence', '') }}</p></section>
+            <section><h3>Additional information</h3><p>{{ answers.get('additional_information', '') }}</p></section>
+            {% if answers.get('clarification_response') %}<section><h3>Clarification response</h3><p>{{ answers.get('clarification_response') }}</p></section>{% endif %}
+        </div>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Original challenge context</h2><span class="challenge-id">{{ challenge.challengeId }}</span></div>
+        {% set problem = challenge.problemStatement or {} %}
+        <div class="public-detail-grid">
+            <section><h3>Government / department</h3><p>{{ challenge.ministry }}</p><p>{{ challenge.department }}</p></section>
+            <section><h3>Problem statement</h3><p>{{ problem.description }}</p></section>
+            <section><h3>Objectives</h3><pre>{{ (challenge.objectives or []) | tojson(indent=2) }}</pre></section>
+            <section><h3>Requirements</h3><pre>{{ (challenge.requirements or {}) | tojson(indent=2) }}</pre></section>
+            <section><h3>Constraints</h3><pre>{{ (challenge.constraints or {}) | tojson(indent=2) }}</pre></section>
+            <section><h3>Eligibility</h3><pre>{{ (challenge.eligibility or {}) | tojson(indent=2) }}</pre></section>
+            <section><h3>Timeline</h3><pre>{{ (challenge.timeline or {}) | tojson(indent=2) }}</pre></section>
+            <section><h3>Evaluation criteria</h3><pre>{{ (challenge.evaluationCriteria or []) | tojson(indent=2) }}</pre></section>
+        </div>
+    </section>
+
+    {% if application.status == 'submitted' %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Eligibility screening</h2><span class="form-note">Review every requirement before recording a final decision.</span></div>
+        {% if requirements %}
+        <form data-screening-form data-application-id="{{ application.application_id }}">
+            <div class="screening-requirements">
+                {% for item in requirements %}
+                <article class="screening-requirement" data-requirement-row data-requirement="{{ item.requirement }}">
+                    <h3>{{ item.requirement }}</h3>
+                    <label>Decision
+                        <select data-requirement-decision required>
+                            <option value="">Choose a decision</option>
+                            <option value="pass" {% if item.decision == 'pass' %}selected{% endif %}>Pass</option>
+                            <option value="fail" {% if item.decision == 'fail' %}selected{% endif %}>Fail</option>
+                            <option value="needs_clarification" {% if item.decision == 'needs_clarification' %}selected{% endif %}>Needs Clarification</option>
+                        </select>
+                    </label>
+                    <label>Reviewer comment<textarea data-requirement-comment maxlength="4000">{{ item.comment or '' }}</textarea></label>
+                    {% if item.created_at %}<small>Last recorded {{ item.created_at }} · {{ item.reviewer_id }}</small>{% endif %}
+                </article>
+                {% endfor %}
+            </div>
+            <div class="application-actions">
+                <button class="button outline" type="submit" value="save">Save screening</button>
+                <button class="button" type="submit" value="eligible">Mark Eligible</button>
+                <button class="button outline" type="submit" value="ineligible">Mark Ineligible</button>
+                <button class="button outline" type="submit" value="clarification_requested">Request Clarification</button>
+                <span class="form-message" data-screening-status role="status"></span>
+            </div>
+        </form>
+        {% else %}
+        <p class="form-note">This challenge has no structured eligibility requirements to screen.</p>
+        {% endif %}
+    </section>
+    {% elif application.status == 'ineligible' %}
+    <section class="challenge-panel"><h2>Evaluation locked</h2><p>This application is ineligible and cannot enter detailed evaluation.</p></section>
+    {% elif application.status == 'eligible' %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Eligibility approved</h2></div>
+        <h3>Evaluation Scorecard</h3>
+        <p class="form-note">Criteria are taken from this challenge. Scores contribute proportionally to each criterion weight.</p>
+        <div class="screening-requirements">
+            {% for item in evaluation_criteria %}
+            <article class="screening-requirement">
+                <h3>{{ item.criterion }}</h3>
+                <p>{{ item.description }}</p>
+                <small>Maximum score {{ item.maximum_score }} · Weight {{ item.weight }} · {{ 'Required' if item.required else 'Optional' }}</small>
+            </article>
+            {% endfor %}
+        </div>
+        <button class="button" type="button" data-start-evaluation data-application-id="{{ application.application_id }}">Start Evaluation</button>
+        <span class="form-message" data-evaluation-status role="status"></span>
+    </section>
+    {% elif application.status == 'under_evaluation' and evaluation %}
+    <section class="challenge-panel">
+        <div class="panel-head">
+            <h2>Evaluation Scorecard</h2>
+            <span class="form-note">Started {{ evaluation.started_at }} · {{ evaluation.reviewer_id }}</span>
+        </div>
+        <form data-evaluation-form data-application-id="{{ application.application_id }}">
+            <div class="screening-requirements">
+                {% for item in evaluation.criteria %}
+                <article class="screening-requirement" data-evaluation-row data-criterion="{{ item.criterion }}">
+                    <h3>{{ item.criterion }}</h3>
+                    <p>{{ item.description }}</p>
+                    <small>Maximum score {{ item.maximum_score }} · Weight {{ item.weight }} · {{ 'Required' if item.required else 'Optional' }}</small>
+                    <label>Score<input type="number" min="0" max="{{ item.maximum_score }}" step="0.01" data-evaluation-score value="{{ item.score if item.score is not none else '' }}"></label>
+                    <label>Reviewer comment<textarea data-evaluation-comment maxlength="4000">{{ item.comment }}</textarea></label>
+                </article>
+                {% endfor %}
+            </div>
+            <p class="evaluation-total" data-evaluation-total>Calculated total: {{ '%.2f' | format(evaluation.total_score) }} / {{ '%.2f' | format(evaluation.maximum_total_score) }}</p>
+            <div class="application-actions">
+                <button class="button outline" type="button" data-save-evaluation>Save Evaluation</button>
+                <button class="button" type="button" data-complete-evaluation>Complete Evaluation</button>
+                <span class="form-message" data-evaluation-status role="status"></span>
+            </div>
+        </form>
+    </section>
+    {% elif application.status == 'evaluation_complete' and evaluation %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Evaluation Scorecard</h2><span class="status-badge evaluation-complete">Evaluation Complete</span></div>
+        <div class="screening-requirements">
+            {% for item in evaluation.criteria %}
+            <article class="screening-requirement">
+                <h3>{{ item.criterion }}</h3>
+                <p>{{ item.description }}</p>
+                <p>Score: {{ '%.2f' | format(item.score) if item.score is not none else 'Not scored' }} / {{ item.maximum_score }} · Weight {{ item.weight }}</p>
+                <p>Reviewer comment: {{ item.comment or 'No comment recorded.' }}</p>
+                <small>{{ item.reviewer_id }} ({{ item.reviewer_role }})</small>
+            </article>
+            {% endfor %}
+        </div>
+        <p class="evaluation-total">Calculated total: {{ '%.2f' | format(evaluation.total_score) }} / {{ '%.2f' | format(evaluation.maximum_total_score) }}</p>
+    </section>
+    {% elif application.status == 'shortlisted' %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Shortlist decision</h2><span class="status-badge published">Shortlisted</span></div>
+        {% if shortlist.decision %}<p>{{ shortlist.decision.comments }}</p><p class="form-note">Decision by {{ shortlist.decision.decision_maker }} ({{ shortlist.decision.decision_role }}) · {{ shortlist.decision.created_at }}</p>{% endif %}
+        <p>This application is shortlisted and may proceed to the later final-selection step.</p>
+    </section>
+    {% elif application.status == 'not_selected' %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Shortlist decision</h2><span class="status-badge closed">Not Selected</span></div>
+        {% if shortlist.decision %}<p>{{ shortlist.decision.comments }}</p><p class="form-note">Decision by {{ shortlist.decision.decision_maker }} ({{ shortlist.decision.decision_role }}) · {{ shortlist.decision.created_at }}</p>{% endif %}
+        <p>The application and its evaluation remain available in the decision history.</p>
+    </section>
+    {% elif application.status == 'clarification_requested' %}
+    <section class="challenge-panel"><h2>Waiting for startup clarification</h2><p>The startup can respond from its application page. Screening resumes after the response is submitted.</p></section>
+    {% else %}
+    <section class="challenge-panel"><h2>{{ application.status | replace('_', ' ') | title }}</h2><p>This application is not currently open for eligibility screening.</p></section>
+    {% endif %}
+
+    {% if application.status != 'submitted' and requirements %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Recorded eligibility decisions</h2></div>
+        <div class="screening-requirements">
+            {% for item in requirements %}
+            <article class="screening-requirement">
+                <h3>{{ item.requirement }}</h3>
+                <p>Decision: {{ item.decision | replace('_', ' ') | title if item.decision else 'Not reviewed' }}</p>
+                <p>Reviewer comment: {{ item.comment or 'No comment recorded.' }}</p>
+                {% if item.created_at %}<small>{{ item.created_at }} · {{ item.reviewer_id }} ({{ item.reviewer_role }})</small>{% endif %}
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Eligibility Screening History</h2></div>
+        {% if audit %}<div class="dashboard-progress-list">{% for event in audit %}<span>{{ event.event_type | replace('_', ' ') | title }} · {{ event.reviewer_id }} ({{ event.reviewer_role }}) · {{ event.created_at }}</span>{% endfor %}</div>{% else %}<p class="form-note">No screening events recorded yet.</p>{% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Evaluation History</h2></div>
+        {% if evaluation and evaluation.history %}
+        <div class="dashboard-progress-list">{% for event in evaluation.history %}<span>{{ event.event_type | replace('_', ' ') | title }} · {{ event.reviewer_id }} ({{ event.reviewer_role }}) · {{ event.created_at }}{% if event.details.total_score is defined %} · Score {{ event.details.total_score }} / {{ event.details.maximum_total_score }}{% endif %}</span>{% endfor %}</div>
+        {% else %}<p class="form-note">No evaluation events recorded yet.</p>{% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Shortlist Decision History</h2></div>
+        {% if shortlist.history %}<div class="dashboard-progress-list">{% for event in shortlist.history %}<span>{{ event.event_type | replace('_', ' ') | title }} · {{ event.decision_maker }} ({{ event.decision_role }}) · {{ event.created_at }}{% if event.details.comments %} · {{ event.details.comments }}{% endif %}</span>{% endfor %}</div>{% else %}<p class="form-note">No shortlist decision recorded yet.</p>{% endif %}
+    </section>
+</main>
+<script>
+    const screeningForm = document.querySelector('[data-screening-form]');
+    screeningForm?.addEventListener('submit', async event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = form.querySelector('[data-screening-status]');
+        const requirements = [...form.querySelectorAll('[data-requirement-row]')].map(row => ({
+            requirement: row.dataset.requirement,
+            decision: row.querySelector('[data-requirement-decision]').value,
+            comment: row.querySelector('[data-requirement-comment]').value
+        }));
+        const action = event.submitter?.value || 'save';
+        status.textContent = 'Saving screening...';
+        const response = await fetch(`/api/government/applications/${form.dataset.applicationId}/screening`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, requirements })
+        });
+        const result = await response.json();
+        status.textContent = result.message;
+        if (response.ok && action !== 'save') window.location.reload();
+    });
+
+    document.querySelector('[data-start-evaluation]')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
+        const response = await fetch(`/api/government/applications/${button.dataset.applicationId}/evaluation/start`, { method: 'POST' });
+        const result = await response.json();
+        document.querySelector('[data-evaluation-status]').textContent = result.message;
+        if (response.ok) window.location.reload();
+    });
+
+    const evaluationForm = document.querySelector('[data-evaluation-form]');
+    async function saveEvaluation(complete = false) {
+        if (!evaluationForm) return;
+        const status = evaluationForm.querySelector('[data-evaluation-status]');
+        const criteria = [...evaluationForm.querySelectorAll('[data-evaluation-row]')].map(row => ({
+            criterion: row.dataset.criterion,
+            score: row.querySelector('[data-evaluation-score]').value,
+            comment: row.querySelector('[data-evaluation-comment]').value
+        }));
+        status.textContent = complete ? 'Saving and completing evaluation...' : 'Saving evaluation...';
+        const saveResponse = await fetch(`/api/government/applications/${evaluationForm.dataset.applicationId}/evaluation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ criteria })
+        });
+        const saved = await saveResponse.json();
+        if (!saveResponse.ok) { status.textContent = saved.message; return; }
+        evaluationForm.querySelector('[data-evaluation-total]').textContent = `Calculated total: ${Number(saved.total_score).toFixed(2)} / ${Number(saved.maximum_total_score).toFixed(2)}`;
+        if (!complete) { status.textContent = saved.message; return; }
+        const response = await fetch(`/api/government/applications/${evaluationForm.dataset.applicationId}/evaluation/complete`, { method: 'POST' });
+        const result = await response.json();
+        status.textContent = result.message;
+        if (response.ok) window.location.reload();
+    }
+    document.querySelector('[data-save-evaluation]')?.addEventListener('click', () => saveEvaluation());
+    document.querySelector('[data-complete-evaluation]')?.addEventListener('click', () => saveEvaluation(true));
+
+    if (screeningForm) {
+        fetch(`/api/government/applications/${screeningForm.dataset.applicationId}/screening/start`, { method: 'POST' });
+    }
+</script>
+{% endblock %}

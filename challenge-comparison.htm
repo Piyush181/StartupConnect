@@ -1,0 +1,95 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Government comparison · {{ challenge.challengeId }}</div>
+            <h1>{{ challenge.title }}</h1>
+            <p class="dashboard-subtitle">Compare completed evaluations and record an explicit government shortlist decision.</p>
+        </div>
+        <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/applications">Back to applications</a>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head">
+            <h2>Evaluation comparison</h2>
+            <span class="form-note">{{ applications | length }} completed evaluations · score is informational only</span>
+        </div>
+        {% if applications %}
+        <div class="comparison-table-wrap">
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Startup</th>
+                        <th>Application ID</th>
+                        <th>Eligibility</th>
+                        <th>Evaluation status</th>
+                        <th>Total evaluation score</th>
+                        <th>Key solution information</th>
+                        <th>Selection status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in applications %}
+                    {% set answers = item.application_data %}
+                    <tr>
+                        <td data-label="Startup">{{ item.startup_name }}</td>
+                        <td data-label="Application ID"><a href="/government-applications/{{ item.application_id }}">{{ item.application_id }}</a></td>
+                        <td data-label="Eligibility">Eligible</td>
+                        <td data-label="Evaluation status">Evaluation Complete</td>
+                        <td data-label="Total evaluation score"><strong>{{ '%.2f' | format(item.total_score) }}</strong> / {{ '%.2f' | format(item.maximum_total_score) }}</td>
+                        <td data-label="Key solution information"><p>{{ answers.get('solution_description', 'No solution summary provided.') }}</p><small>{{ answers.get('technology_approach', '') }}</small></td>
+                        <td data-label="Selection status">
+                            {% if item.selection_status == 'shortlisted' %}
+                            <span class="status-badge published">Shortlisted</span>
+                            {% elif item.selection_status == 'not_selected' %}
+                            <span class="status-badge closed">Not Selected</span>
+                            {% else %}
+                            <span class="status-badge">Pending Decision</span>
+                            {% endif %}
+                            {% if item.decision_at %}<small>{{ item.decision_maker }} · {{ item.decision_at }}</small>{% endif %}
+                            {% if item.decision_comments %}<p class="shortlist-decision-reason">{{ item.decision_comments }}</p>{% endif %}
+                        </td>
+                        <td data-label="Action">
+                            {% if item.selection_status == 'Pending Decision' %}
+                            <form class="shortlist-decision-form" data-shortlist-form data-application-id="{{ item.application_id }}">
+                                <label>Decision reason<textarea name="comments" rows="2" maxlength="4000" required></textarea></label>
+                                <button class="button small" type="submit" value="shortlisted">Shortlist</button>
+                                <button class="button outline small" type="submit" value="not_selected">Not Selected</button>
+                                <span class="form-message" data-shortlist-status role="status"></span>
+                            </form>
+                            {% else %}
+                            <a class="text-button" href="/government-applications/{{ item.application_id }}">View decision history</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state"><p>No applications have completed evaluation for this challenge.</p></div>
+        {% endif %}
+    </section>
+</main>
+<script>
+    document.querySelectorAll('[data-shortlist-form]').forEach(form => {
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            const status = form.querySelector('[data-shortlist-status]');
+            const decision = event.submitter?.value;
+            status.textContent = 'Recording decision...';
+            const response = await fetch(`/api/government/applications/${form.dataset.applicationId}/shortlist`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ decision, comments: form.elements.comments.value })
+            });
+            const result = await response.json();
+            status.textContent = result.message;
+            if (response.ok) window.location.reload();
+        });
+    });
+</script>
+{% endblock %}
