@@ -1,1 +1,182 @@
-
+{
+  "drafts": {},
+  "published": {
+    "gov-2026-00001": {
+      "title": "AI Mobility and Route Optimization Platform",
+      "challengeId": "GOV-2026-00001",
+      "challengeType": "Software",
+      "category": "AI / ML",
+      "categoryList": [
+        "AI / ML",
+        "Web Development"
+      ],
+      "difficulty": "Advanced",
+      "department": "Department of Skills, Employment, Entrepreneurship and Innovation",
+      "ministry": "Maharashtra State Innovation Society",
+      "state": "Maharashtra",
+      "status": "start bidding",
+      "problemStatement": {
+        "description": "We want to create chatbots for teaching traffic rules",
+        "currentSituation": "The current process for urban mobility networks and emergency transport operations is not yet described in enough detail and should be confirmed by the Ministry officer.",
+        "painPoints": [
+          "Existing workflows may be manual or fragmented",
+          "Relevant information may be difficult to monitor consistently",
+          "The current response process needs to be confirmed by the Ministry officer"
+        ],
+        "affectedGroups": [
+          "Citizens",
+          "Government Officers",
+          "Local Authorities"
+        ],
+        "geographicScope": "Local",
+        "impact": "A suitable solution should improve the public-service outcome described by the Ministry officer."
+      },
+      "objectives": {
+        "primary": "",
+        "secondary": []
+      },
+      "expectedOutcomes": [
+        {
+          "text": "Improved monitoring and decision-making for the described problem",
+          "order": 1
+        },
+        {
+          "text": "A clearer and more consistent workflow for participating teams",
+          "order": 2
+        },
+        {
+          "text": "Evidence of improved public-service outcomes",
+          "order": 3
+        }
+      ],
+      "requirements": {
+        "mandatory": [
+          "A workflow aligned to the described problem",
+          "Role-based access for authorized users",
+          "Evidence and progress reporting"
+        ],
+        "optional": [
+          "Dashboard and reporting views",
+          "Integration with relevant existing workflows"
+        ],
+        "features": [
+          {
+            "name": "Secure user access",
+            "priority": "Mandatory"
+          },
+          {
+            "name": "Progress reporting",
+            "priority": "Mandatory"
+          }
+        ]
+      },
+      "templateSpecific": {
+        "templateSpecific": {
+          "datasetAvailability": "To be provided / To be determined",
+          "datasetFormat": "",
+          "datasetSize": "",
+          "targetVariable": "",
+          "expectedModelOutput": "To be specified by Ministry officer",
+          "baselineModel": "",
+          "evaluationMetric": "To be specified by Ministry officer",
+          "explainabilityRequirements": "",
+          "computeRequirements": "",
+          "trainingConstraints": "",
+          "inferenceConstraints": "",
+          "modelRestrictions": ""
+        }
+      },
+      "constraints": {
+        "technical": [],
+        "budget": {
+          "estimatedBudget": "",
+          "budgetType": "Not Applicable"
+        },
+        "deployment": "No Preference",
+        "security": []
+      },
+      "resources": {
+        "dataProvided": "Yes",
+        "datasetType": [],
+        "datasetSize": "",
+        "dataAccess": "Public",
+        "apis": [],
+        "documents": []
+      },
+      "deliverables": [
+        "Working Prototype",
+        "Source Code",
+        "Technical Documentation"
+      ],
+      "platforms": [
+        "Web",
+        "Android"
+      ],
+      "evaluationCriteria": [
+        {
+          "criterion": "Technical Quality",
+          "description": "Model and software quality",
+          "weight": 30
+        },
+        {
+          "criterion": "Innovation",
+          "description": "Novelty and problem-solving approach",
+          "weight": 25
+        },
+        {
+          "criterion": "Impact",
+          "description": "Public value and operational benefit",
+          "weight": 25
+        },
+        {
+          "criterion": "Scalability",
+          "description": "Model and deployment viability",
+          "weight": 20
+        }
+      ],
+      "eligibility": {
+        "participantTypes": [
+          "Startups",
+          "Individual Developers",
+          "Researchers"
+        ],
+        "minTeamSize": 1,
+        "maxTeamSize": 5,
+        "requiredSkills": [
+          "Python",
+          "JavaScript",
+          "AI/ML",
+          "Cloud"
+        ]
+      },
+      "timeline": {
+        "registrationOpen": "",
+        "registrationClose": "",
+        "submissionOpen": "",
+        "submissionDeadline": "",
+        "evaluationStart": "",
+        "resultsDate": ""
+      },
+      "contact": {
+        "publicDepartment": "",
+        "nodalOfficerName": "",
+        "designation": "",
+        "officialEmail": "",
+        "officialPhone": "",
+        "internalDepartment": "",
+        "internalOfficerName": ""
+      },
+      "challengeCategory": "AI / ML",
+      "challengeTitle": "AI Mobility and Route Optimization Platform",
+      "governmentBody": "Maharashtra State Innovation Society",
+      "reviewIndicators": [
+        "AI Suggested",
+        "Review Recommended"
+      ],
+      "template": "ai",
+      "updatedAt": "2026-09-25T20:50:54Z",
+      "createdBy": "admin",
+      "id": "gov-2026-00001"
+    }
+  }
+}

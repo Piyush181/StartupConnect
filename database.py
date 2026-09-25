@@ -19,7 +19,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 MYSQL_CONFIG = {
     "host": os.getenv("STARTUP_CONNECT_DB_HOST", "localhost"),
     "user": os.getenv("STARTUP_CONNECT_DB_USER", "root"),
-    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "apIEHewSeq8"),
+    "password": os.getenv("STARTUP_CONNECT_DB_PASSWORD", "Soham@14"),
     "database": "startupconnect"
 }
 
