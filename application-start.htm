@@ -14,7 +14,7 @@
 
     <section class="application-context" aria-labelledby="challenge-context-title">
         <div class="application-context-heading">
-            <div><span class="feature-number">{{ contract.id }} · {{ contract.type }}</span><h2 id="challenge-context-title">Challenge context</h2></div>
+            <div><span class="feature-number">{{ contract.id }} · {{ contract.type }}{% if contract.is_sample %} · Sample record{% endif %}</span><h2 id="challenge-context-title">Challenge context</h2></div>
             <span class="contract-status {{ 'active' if not closed else 'review' }}">{{ 'Accepting applications' if not closed else 'Submissions closed' }}</span>
         </div>
         <div class="application-government"><strong>{{ challenge.ministry or 'Government department' }}</strong><span>{{ challenge.department or 'Department not specified' }}</span></div>

@@ -10,6 +10,7 @@
         </div>
         <a class="button" href="/company-profile">View company profile</a>
     </section>
+    <p class="form-note sample-data-note">Portfolio figures and ongoing contracts are illustrative sample records. Published challenges marked “Sample record” are demo opportunities; My Applications below shows your saved submissions.</p>
     <section class="dashboard-stats" aria-label="Contract summary">
         <article><span>Current contracts</span><strong>3</strong><small>2 on track · 1 needs review</small></article>
         <article><span>Contract value</span><strong>₹1.42 Cr</strong><small>Across active engagements</small></article>
@@ -22,7 +23,7 @@
             <div>
                 <div class="section-label">In progress</div>
                 <h2>Ongoing contracts</h2>
-            </div><span class="section-meta">Showing 3 of 12</span>
+            </div><span class="section-meta">Illustrative sample records</span>
         </div>
         <div class="contract-grid">
             <article class="contract-card">
@@ -54,37 +55,18 @@
             <div>
                 <div class="section-label">Open network</div>
                 <h2>Available contracts</h2>
-            </div><button class="button outline" type="button" data-dialog="available-dialog">Sort and filter</button>
+            </div><span class="section-meta">Sample opportunities are labeled</span>
         </div>
         {% for challenge in available_challenges %}
         <article class="contract-list-item">
-            <div><span class="contract-code">OPEN · {{ challenge.challengeId }}</span>
+            <div><span class="contract-code">OPEN · {{ challenge.challengeId }}{% if challenge.isSample %} · Sample record{% endif %}</span>
                 <h3><a href="/contracts/{{ challenge.challengeId }}">{{ challenge.title }}</a></h3>
                 <p>{{ challenge.government.department or 'Government department' }} · {{ challenge.category or challenge.challengeType }}</p>
             </div>
             <strong>₹{{ '{:,.2f}'.format(challenge.bidStartPrice or 0) }}</strong><span>Start bidding</span><b>↗</b>
         </article>
         {% endfor %}
-        <div class="contract-list">
-            <article>
-                <div><span class="contract-code">OPEN · PS MH-038</span>
-                    <h3><a href="/contracts/PS-MH-038">Low-cost remote screening for diabetic retinopathy</a></h3>
-                    <p>Public Health Department · Health-tech</p>
-                </div><strong>₹50–75 lakh</strong><span>Apply by 02 Sep 2026</span><b>↗</b>
-            </article>
-            <article>
-                <div><span class="contract-code">OPEN · PS MH-045</span>
-                    <h3>Water quality monitoring for rural supply networks</h3>
-                    <p>Water Resources Department · Climate-tech</p>
-                </div><strong>₹25–40 lakh</strong><span>Apply by 21 Sep 2026</span><b>↗</b>
-            </article>
-            <article>
-                <div><span class="contract-code">OPEN · PS MH-047</span>
-                    <h3>Accessible digital services for citizen centres</h3>
-                    <p>General Administration Department · Gov-tech</p>
-                </div><strong>₹35–55 lakh</strong><span>Apply by 04 Oct 2026</span><b>↗</b>
-            </article>
-        </div><button class="text-button" type="button" data-dialog="available-dialog">View all available contracts
+        <button class="text-button" type="button" data-dialog="available-dialog">View all available contracts
             <span>↗</span></button>
     </section>
 </main>
@@ -117,12 +99,9 @@
                 <option>Research</option>
             </select></label></div>
     <div class="dialog-list">
-        <p>PS MH-038 · Diabetic retinopathy screening · <strong>Health-tech · ₹50–75 lakh</strong></p>
-        <p>PS MH-045 · Rural water monitoring · <strong>Climate-tech · ₹25–40 lakh</strong></p>
-        <p>PS MH-047 · Accessible citizen services · <strong>Gov-tech · ₹35–55 lakh</strong></p>
-        <p>PS MH-050 · Smart traffic signal coordination · <strong>Mobility · ₹60–90 lakh</strong></p>
-        <p>PS MH-052 · Primary school nutrition tracking · <strong>Health-tech · ₹20–30 lakh</strong></p>
-        <p>PS MH-055 · Marathi language public assistant · <strong>AI / ML · ₹40–60 lakh</strong></p>
+        {% for challenge in available_challenges %}
+        <p>{{ challenge.challengeId }} · {{ challenge.title }} · <strong>{{ challenge.category }}{% if challenge.isSample %} · Sample record{% endif %}</strong></p>
+        {% endfor %}
     </div>
 </dialog>
 <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' }; document.querySelectorAll('[data-dialog]').forEach(button => button.onclick = () => document.querySelector('#' + button.dataset.dialog).showModal()); document.querySelectorAll('.dialog-close').forEach(button => button.onclick = () => button.closest('dialog').close()); document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close() }));</script>
@@ -141,7 +120,7 @@
             {% elif application.status == 'clarification_requested' %}
             <a class="button small application-list-action" href="/contracts/{{ application.challenge_id }}/apply">View / Respond</a>
             {% elif application.status == 'selected' %}
-            <button class="button small application-list-action" type="button" disabled>Proceed to Pilot Agreement</button>
+            <button class="button small application-list-action" type="button" disabled>Selected — Proceed to Pilot Agreement</button>
             {% else %}
             <a class="button small application-list-action" href="/contracts/{{ application.challenge_id }}/apply">View Application</a>
             {% endif %}
