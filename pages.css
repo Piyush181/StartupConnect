@@ -1198,13 +1198,41 @@ input {
 .role-login-form[hidden] { display: none; }
 
 .link-button {
-    border: 0;
-    padding: 0;
-    background: transparent;
+    border: 1px solid var(--line);
+    padding: 10px 14px;
+    background: #fff;
     color: var(--teal);
     font: inherit;
     font-weight: 800;
     cursor: pointer;
+}
+
+.dashboard-shell .card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 22px;
+}
+
+.dashboard-shell .card-actions a,
+.dashboard-shell .card-actions .link-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.dashboard-shell .card-actions a:hover,
+.dashboard-shell .card-actions .link-button:hover {
+    border-color: var(--teal);
+    background: #e8f5f3;
+    color: var(--teal);
 }
 
 .periodic-schedule,
@@ -1293,6 +1321,131 @@ input {
 
 .public-challenges-hero {
     padding-bottom: 34px;
+}
+
+.evaluation-shell {
+    padding: 58px 0 100px;
+}
+
+.evaluation-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 42px 0 35px;
+    border-bottom: 1px solid var(--line);
+}
+
+.evaluation-heading h1 {
+    max-width: 780px;
+    margin: 18px 0 12px;
+    font-size: clamp(2.8rem, 5vw, 5rem);
+    line-height: .94;
+}
+
+.evaluation-heading p {
+    max-width: 620px;
+    margin: 0;
+    color: var(--muted);
+}
+
+.evaluation-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    margin: 28px 0 42px;
+    background: var(--line);
+}
+
+.evaluation-summary div {
+    min-height: 105px;
+    padding: 19px;
+    background: var(--paper);
+}
+
+.evaluation-summary span {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.evaluation-summary strong {
+    display: block;
+    margin-top: 16px;
+    overflow-wrap: anywhere;
+    font: 600 20px Newsreader, serif;
+}
+
+.evaluation-panel {
+    margin-bottom: 70px;
+}
+
+.evaluation-list {
+    display: grid;
+    gap: 16px;
+}
+
+.evaluation-card {
+    padding: 22px;
+    border: 1px solid var(--line);
+    background: #fff;
+}
+
+.evaluation-card-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.evaluation-card h3 {
+    margin: 7px 0 0;
+    font-size: 28px;
+}
+
+.evaluation-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.evaluation-grid {
+    display: grid;
+    grid-template-columns: .8fr 1.2fr;
+    gap: 24px;
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.evaluation-grid strong {
+    font-size: 12px;
+}
+
+.evaluation-grid p {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.bid-history {
+    display: grid;
+    gap: 7px;
+    margin-top: 8px;
+    color: var(--teal);
+    font: 12px 'DM Mono', monospace;
+}
+
+.evaluation-muted {
+    color: var(--muted);
+}
+
+.evaluation-assign {
+    margin-top: 20px;
 }
 
 .public-view-note {
@@ -1512,6 +1665,8 @@ input {
     .application-status-summary { justify-items: start; margin-top: 20px; }
     .periodic-schedule,
     .report-review-form,
+    .evaluation-summary,
+    .evaluation-grid,
     .public-government-strip,
     .public-challenge-summary,
     .public-detail-grid,
@@ -1522,6 +1677,7 @@ input {
     }
 
     .public-challenge-card-head,
+    .evaluation-heading,
     .public-government-strip,
     .public-challenge-summary,
     .public-detail-grid,

@@ -10,11 +10,10 @@
         </div>
         <a class="button" href="/company-profile">View company profile</a>
     </section>
-    <p class="form-note sample-data-note">Portfolio figures and ongoing contracts are illustrative sample records. Published challenges marked “Sample record” are demo opportunities; My Applications below shows your saved submissions.</p>
     <section class="dashboard-stats" aria-label="Contract summary">
-        <article><span>Current contracts</span><strong>3</strong><small>2 on track · 1 needs review</small></article>
-        <article><span>Contract value</span><strong>₹1.42 Cr</strong><small>Across active engagements</small></article>
-        <article><span>Next milestone</span><strong>12 days</strong><small>MH-041 · field validation</small></article>
+        <article><span>Current contracts</span><strong>{{ assigned_contracts | length }}</strong><small>Assigned to your startup</small></article>
+        <article><span>Contract value</span><strong>—</strong><small>Recorded per assigned contract</small></article>
+        <article><span>Next milestone</span><strong>—</strong><small>Available after reporting is scheduled</small></article>
         <article><span>Profile status</span><strong class="status-text">Verified</strong><small>Last reviewed
                 today</small></article>
     </section>
@@ -23,88 +22,43 @@
             <div>
                 <div class="section-label">In progress</div>
                 <h2>Ongoing contracts</h2>
-            </div><span class="section-meta">Illustrative sample records</span>
+            </div><span class="section-meta">{{ assigned_contracts | length }} assigned</span>
         </div>
+        {% if assigned_contracts %}
         <div class="contract-grid">
+            {% for contract in assigned_contracts %}
             <article class="contract-card">
-                <div class="contract-top"><span class="contract-code">PS MH-041</span><span
-                        class="contract-status active">On track</span></div>
-                <h3>Predictive crop advisory for smallholder farms</h3>
-                <p>Department of Agriculture · Agri-tech</p>
-                <div class="contract-footer"><span>₹48 lakh</span><span>Milestone 3 of 5</span></div>
+                <div class="contract-top"><span class="contract-code">{{ contract.challengeId }}</span><span class="contract-status active">{{ contract.status }}</span></div>
+                <h3><a href="/contracts/{{ contract.challengeId }}">{{ contract.title or 'Untitled challenge' }}</a></h3>
+                <p>{{ contract.department or 'Government department' }} · {{ contract.category or contract.challengeType or 'Contract' }}</p>
+                <div class="contract-footer"><span>{{ contract.assignedBidAmount or contract.currentBidPrice or contract.bidStartPrice or 'Bid pending' }}</span><span>Assigned startup ID: {{ contract.assignedStartupId }}</span></div>
             </article>
-            <article class="contract-card">
-                <div class="contract-top"><span class="contract-code">PS MH-034</span><span
-                        class="contract-status review">Needs review</span></div>
-                <h3>Safer last-mile mobility for tier-2 cities</h3>
-                <p>Urban Development Department · Mobility</p>
-                <div class="contract-footer"><span>₹32 lakh</span><span>Milestone 2 of 4</span></div>
-            </article>
-            <article class="contract-card">
-                <div class="contract-top"><span class="contract-code">PS MH-029</span><span
-                        class="contract-status active">On track</span></div>
-                <h3>Open data tools for municipal planning</h3>
-                <p>Urban Development Department · Gov-tech</p>
-                <div class="contract-footer"><span>₹62 lakh</span><span>Milestone 4 of 6</span></div>
-            </article>
-        </div><button class="text-button" type="button" data-dialog="ongoing-dialog">Show all ongoing contracts
-            <span>↗</span></button>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="application-empty">No contracts have been assigned to this startup yet.</p>
+        {% endif %}
     </section>
     <section class="dashboard-section available-section">
         <div class="dashboard-section-head">
             <div>
                 <div class="section-label">Open network</div>
                 <h2>Available contracts</h2>
-            </div><span class="section-meta">Sample opportunities are labeled</span>
+            </div>
         </div>
         {% for challenge in available_challenges %}
         <article class="contract-list-item">
-            <div><span class="contract-code">OPEN · {{ challenge.challengeId }}{% if challenge.isSample %} · Sample record{% endif %}</span>
+            <div><span class="contract-code">OPEN · {{ challenge.challengeId }}</span>
                 <h3><a href="/contracts/{{ challenge.challengeId }}">{{ challenge.title }}</a></h3>
                 <p>{{ challenge.government.department or 'Government department' }} · {{ challenge.category or challenge.challengeType }}</p>
             </div>
             <strong>₹{{ '{:,.2f}'.format(challenge.bidStartPrice or 0) }}</strong><span>Start bidding</span><b>↗</b>
         </article>
         {% endfor %}
-        <button class="text-button" type="button" data-dialog="available-dialog">View all available contracts
-            <span>↗</span></button>
+        {% if not available_challenges %}<p class="application-empty">No contracts are currently open for bidding.</p>{% endif %}
     </section>
 </main>
-<dialog class="dashboard-dialog" id="ongoing-dialog">
-    <div class="dialog-head">
-        <h2>All ongoing contracts</h2><button class="dialog-close" type="button">×</button>
-    </div>
-    <div class="dialog-list">
-        <p>PS MH-041 · Predictive crop advisory · <strong>On track</strong></p>
-        <p>PS MH-034 · Last-mile mobility · <strong>Needs review</strong></p>
-        <p>PS MH-029 · Municipal planning tools · <strong>On track</strong></p>
-        <p>PS MH-021 · District health analytics · <strong>On track</strong></p>
-        <p>PS MH-018 · Solar school infrastructure · <strong>On track</strong></p>
-        <p>PS MH-012 · Flood early warning system · <strong>Needs review</strong></p>
-    </div>
-</dialog>
-<dialog class="dashboard-dialog" id="available-dialog">
-    <div class="dialog-head">
-        <h2>Available contracts</h2><button class="dialog-close" type="button">×</button>
-    </div>
-    <div class="filter-row"><label>Sort by <select>
-                <option>Deadline</option>
-                <option>Budget: high to low</option>
-                <option>Budget: low to high</option>
-                <option>Sector</option>
-            </select></label><label>Type <select>
-                <option>All types</option>
-                <option>Software</option>
-                <option>Hardware</option>
-                <option>Research</option>
-            </select></label></div>
-    <div class="dialog-list">
-        {% for challenge in available_challenges %}
-        <p>{{ challenge.challengeId }} · {{ challenge.title }} · <strong>{{ challenge.category }}{% if challenge.isSample %} · Sample record{% endif %}</strong></p>
-        {% endfor %}
-    </div>
-</dialog>
-<script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' }; document.querySelectorAll('[data-dialog]').forEach(button => button.onclick = () => document.querySelector('#' + button.dataset.dialog).showModal()); document.querySelectorAll('.dialog-close').forEach(button => button.onclick = () => button.closest('dialog').close()); document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close() }));</script>
+<script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };</script>
 <section class="dashboard-section container" aria-labelledby="my-applications-title">
     <div class="dashboard-section-head">
         <div><div class="section-label">Challenge submissions</div><h2 id="my-applications-title">My Applications</h2></div>
@@ -120,7 +74,7 @@
             {% elif application.status == 'clarification_requested' %}
             <a class="button small application-list-action" href="/contracts/{{ application.challenge_id }}/apply">View / Respond</a>
             {% elif application.status == 'selected' %}
-            <button class="button small application-list-action" type="button" disabled>Selected — Proceed to Pilot Agreement</button>
+            <button class="button small application-list-action" type="button" disabled>Proceed to Pilot Agreement</button>
             {% else %}
             <a class="button small application-list-action" href="/contracts/{{ application.challenge_id }}/apply">View Application</a>
             {% endif %}
