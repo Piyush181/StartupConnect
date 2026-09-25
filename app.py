@@ -10,10 +10,18 @@ from flask import Flask, jsonify, redirect, render_template, request, send_from_
 from database import (
     DatabaseConfigurationError,
     DuplicateBusinessIdError,
+    DuplicateApplicationError,
     authenticate_ministry,
     authenticate_startup,
+    count_challenge_applications,
     get_startup_profile,
+    get_startup_application,
+    get_application,
+    list_challenge_applications,
+    list_startup_applications,
     save_challenge_contract,
+    save_application,
+    list_startup_directory,
     save_contract_report,
     save_startup_registration,
 )
@@ -134,7 +142,6 @@ SAMPLE_CONTRACTS = {
         "timeline": "16 weeks from contract award",
         "milestones": ["Weeks 1–3 · Discovery and clinical workflow mapping", "Weeks 4–8 · Prototype and supervised validation", "Weeks 9–13 · District pilot across three facilities", "Weeks 14–16 · Impact report and scale recommendation"],
         "application_deadline": "02 September 2026",
-        "applications": 18,
         "type": "Health-tech",
         "status": "start bidding",
         "bidStartPrice": 5000000,
@@ -259,6 +266,61 @@ def _challenge_by_id(challenge_id):
     return next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id or item.get("id") == challenge_id), None)
 
 
+APPLICATION_FIELDS = {
+    "problem_addressed",
+    "challenge_solution",
+    "solution_description",
+    "technology_approach",
+    "development_stage",
+    "implementation_approach",
+    "expected_timeline",
+    "government_support",
+    "expected_outcomes",
+    "target_users",
+    "measurable_impact",
+    "previous_deployments",
+    "relevant_experience",
+    "supporting_evidence",
+    "additional_information",
+    "clarification_response",
+}
+REQUIRED_APPLICATION_FIELDS = {
+    "problem_addressed",
+    "challenge_solution",
+    "solution_description",
+    "technology_approach",
+    "development_stage",
+    "implementation_approach",
+    "expected_timeline",
+    "government_support",
+    "expected_outcomes",
+    "target_users",
+    "measurable_impact",
+}
+
+
+def _startup_is_eligible(challenge, profile):
+    eligibility = challenge.get("eligibility") or {}
+    participant_types = eligibility.get("participantTypes") or []
+    if isinstance(participant_types, str):
+        participant_types = [participant_types]
+    participant_types = [str(value).strip().casefold() for value in participant_types if str(value).strip()]
+    if participant_types and not any(value in {"open to all", "all", "startup", "startups"} for value in participant_types):
+        business_type = str(profile.get("business_type") or "").casefold()
+        if not any(value == business_type or value in business_type or business_type in value for value in participant_types if business_type):
+            return False
+    deadline = str((challenge.get("timeline") or {}).get("submissionDeadline") or "").strip()
+    if deadline:
+        for date_format in ("%Y-%m-%d", "%d %B %Y", "%d %b %Y"):
+            try:
+                if datetime.strptime(deadline, date_format).date() < datetime.utcnow().date():
+                    return False
+                break
+            except ValueError:
+                continue
+    return True
+
+
 def _contract_view(contract_id):
     contract = SAMPLE_CONTRACTS.get(contract_id.upper())
     challenge = _challenge_by_id(contract_id)
@@ -277,7 +339,7 @@ def _contract_view(contract_id):
             "timeline": "See challenge timeline for delivery milestones.",
             "milestones": [],
             "application_deadline": (challenge.get("timeline") or {}).get("submissionDeadline") or "To be announced",
-            "applications": len((challenge.get("startupEngagement") or {}).get("startups", [])),
+            "applications": _challenge_application_count(challenge.get("challengeId")),
             "type": challenge.get("challengeType") or "Open innovation",
             "status": challenge.get("status"),
             "bidStartPrice": challenge.get("bidStartPrice", 0),
@@ -285,7 +347,18 @@ def _contract_view(contract_id):
             "bids": challenge.get("bids", []),
             "challenge": challenge,
         }
+    if contract:
+        contract = dict(contract)
+        contract["applications"] = _challenge_application_count(contract_id)
     return contract
+
+
+def _challenge_application_count(challenge_id):
+    try:
+        return count_challenge_applications(challenge_id)
+    except Exception:
+        app.logger.exception("Could not load application count for challenge %s.", challenge_id)
+        return 0
 
 
 def _persist_contract(challenge):
@@ -347,6 +420,7 @@ def _public_challenge(challenge):
         "evaluationCriteria": challenge.get("evaluationCriteria", []),
         "eligibility": challenge.get("eligibility", {}),
         "timeline": timeline,
+        "applicationCount": _challenge_application_count(challenge.get("challengeId")),
         "bidStartPrice": challenge.get("bidStartPrice", 0),
         "currentBidPrice": challenge.get("currentBidPrice", challenge.get("bidStartPrice", 0)),
         "resources": {
@@ -1034,6 +1108,8 @@ def login():
         session["ministry_id"] = str(data.get("ministry_id", "")).strip()
     else:
         session["business_id"] = str(data.get("business_id", "")).strip()
+    if role == "startup":
+        session["business_id"] = business_id
     return jsonify({"ok": True, "message": "Sign in successful.", "redirect": landing_page})
 
 
@@ -1051,7 +1127,15 @@ def startup_portal():
         session.clear()
         return redirect("/login")
     available_challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "start bidding"]
-    return render_template("startup-portal.htm", profile=profile, available_challenges=available_challenges)
+    try:
+        applications = list_startup_applications(session["business_id"])
+    except Exception:
+        app.logger.exception("Could not load applications for the startup portal.")
+        applications = []
+    for application in applications:
+        challenge = _challenge_by_id(application["challenge_id"])
+        application["challenge_title"] = challenge.get("title") if challenge else "Challenge no longer available"
+    return render_template("startup-portal.htm", profile=profile, available_challenges=available_challenges, applications=applications)
 
 
 @app.get("/company-profile")
@@ -1076,11 +1160,131 @@ def contract_detail(contract_id):
 @session_required("startup")
 def start_contract_application(contract_id):
     contract = _contract_view(contract_id)
-    if not contract:
+    if not contract or not contract.get("challenge"):
         return ("Contract not found", 404)
-    if contract.get("status") != "start bidding":
-        return render_template("application-start.htm", contract=contract, closed=True)
-    return render_template("application-start.htm", contract=contract)
+    profile = get_startup_profile(session["business_id"])
+    if not profile:
+        return ("Startup profile not found", 404)
+    try:
+        application = get_startup_application(contract["id"], session["business_id"])
+    except Exception:
+        app.logger.exception("Could not load the startup's application for %s.", contract_id)
+        return ("Applications are temporarily unavailable.", 503)
+    closed = contract.get("status") != "start bidding"
+    if closed and not application:
+        return render_template("application-start.htm", contract=contract, profile=profile, application=None, closed=True)
+    return render_template("application-start.htm", contract=contract, profile=profile, application=application, closed=closed)
+
+
+@app.post("/api/challenges/<challenge_id>/applications")
+def save_startup_application(challenge_id):
+    if session.get("role") != "startup" or not session.get("business_id"):
+        return jsonify({"ok": False, "message": "Startup authentication required."}), 401
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get("action") or "submit").strip().lower()
+    if challenge.get("status") != "start bidding" and action not in {"draft", "respond"}:
+        return jsonify({"ok": False, "message": "This challenge is not accepting applications."}), 400
+    profile = get_startup_profile(session["business_id"])
+    if not profile:
+        return jsonify({"ok": False, "message": "Startup profile not found."}), 403
+    if action not in {"draft", "submit", "respond"}:
+        return jsonify({"ok": False, "message": "Choose Save Draft, Submit Application, or Submit Clarification."}), 400
+    if action == "draft" and challenge.get("status") != "start bidding":
+        try:
+            existing_draft = get_startup_application(challenge_id, session["business_id"])
+        except Exception:
+            app.logger.exception("Could not verify draft for closed challenge %s.", challenge_id)
+            return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+        if not existing_draft or existing_draft.get("status") != "draft":
+            return jsonify({"ok": False, "message": "Only an existing draft can be edited after this challenge closes."}), 400
+    raw_data = payload.get("application_data") or {}
+    if not isinstance(raw_data, dict):
+        return jsonify({"ok": False, "message": "Application answers must be an object."}), 400
+    application_data = {
+        key: str(raw_data.get(key) or "").strip()
+        for key in APPLICATION_FIELDS
+    }
+    if any(len(value) > 10000 for value in application_data.values()):
+        return jsonify({"ok": False, "message": "An answer exceeds the 10,000 character limit."}), 400
+    if action == "respond":
+        try:
+            existing_application = get_startup_application(challenge_id, session["business_id"])
+        except Exception:
+            app.logger.exception("Could not load clarification request for %s.", challenge_id)
+            return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+        if not existing_application or existing_application.get("status") != "clarification_requested":
+            return jsonify({"ok": False, "message": "No clarification response is currently requested."}), 409
+        clarification_response = application_data.get("clarification_response", "")
+        if not clarification_response:
+            return jsonify({"ok": False, "message": "A clarification response is required."}), 400
+        application_data = dict(existing_application.get("application_data") or {})
+        application_data["clarification_response"] = clarification_response
+    elif action == "submit":
+        missing = sorted(key for key in REQUIRED_APPLICATION_FIELDS if not application_data.get(key))
+        if missing:
+            return jsonify({"ok": False, "message": "Complete all required application fields before submitting.", "missing": missing}), 400
+        if not _startup_is_eligible(challenge, profile):
+            return jsonify({"ok": False, "message": "This startup does not meet the challenge eligibility requirements or deadline."}), 403
+    try:
+        application = save_application(
+            challenge_id,
+            session["business_id"],
+            application_data,
+            "draft" if action == "draft" else "submitted",
+        )
+    except DuplicateApplicationError:
+        return jsonify({"ok": False, "message": "This application has already been submitted and can no longer be changed."}), 409
+    except Exception:
+        app.logger.exception("Application save failed for challenge %s.", challenge_id)
+        return jsonify({"ok": False, "message": "The application could not be saved. Please try again."}), 503
+    message = "Draft saved." if action == "draft" else "Clarification response submitted." if action == "respond" else "Application submitted successfully."
+    return jsonify({"ok": True, "application": application, "message": message})
+
+
+@app.get("/api/applications")
+def startup_applications_api():
+    if session.get("role") != "startup" or not session.get("business_id"):
+        return jsonify({"ok": False, "message": "Startup authentication required."}), 401
+    try:
+        return jsonify({"ok": True, "applications": list_startup_applications(session["business_id"])})
+    except Exception:
+        app.logger.exception("Could not load startup applications.")
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+
+
+@app.get("/api/applications/<application_id>")
+def startup_application_api(application_id):
+    if session.get("role") != "startup" or not session.get("business_id"):
+        return jsonify({"ok": False, "message": "Startup authentication required."}), 401
+    try:
+        application = get_application(application_id, session["business_id"])
+    except Exception:
+        app.logger.exception("Could not load application %s.", application_id)
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+    if not application:
+        return jsonify({"ok": False, "message": "Application not found."}), 404
+    return jsonify({"ok": True, "application": application})
+
+
+@app.get("/api/challenges/<challenge_id>/applications")
+def government_challenge_applications_api(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if challenge.get("createdBy") != session.get("ministry_id"):
+        return jsonify({"ok": False, "message": "You are not authorized to view applications for this challenge."}), 403
+    try:
+        applications = list_challenge_applications(challenge_id)
+        return jsonify({"ok": True, "count": len(applications), "applications": applications})
+    except Exception:
+        app.logger.exception("Could not load government applications for %s.", challenge_id)
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
 
 
 @app.post("/api/contracts/<contract_id>/bids")

@@ -9,8 +9,8 @@
             <h1>{{ contract.title }}</h1>
             <p class="contract-ministry">Submitted by {{ contract.ministry }} · {{ contract.sub_ministry }}</p>
         </div>
-        <div class="contract-application-box"><span>{{ contract.applications }} submitted applications</span>{% if
-            session.get('role') == 'startup' %}<a class="button" href="/contracts/{{ contract.id }}/apply">Start
+        <div class="contract-application-box"><span>{{ contract.applications }} Applications</span>{% if
+            session.get('role') == 'startup' and contract.challenge %}<a class="button" href="/contracts/{{ contract.id }}/apply">Start
                 application</a>{% endif %}</div>
     </section>
     <section class="contract-overview">

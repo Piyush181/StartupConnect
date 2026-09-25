@@ -1,43 +1,124 @@
 {% extends "base.htm" %}
 
 {% block content %}
-<main class="container application-start"><a class="back-link" href="/contracts/{{ contract.id }}">← Back to problem statement</a>
+{% set challenge = contract.challenge %}
+{% set answers = application.application_data if application else {} %}
+{% set clarification = application and application.status == 'clarification_requested' %}
+{% set submitted = application and application.status not in ['draft', 'clarification_requested'] %}
+{% set locked = application and application.status != 'draft' %}
+<main class="container application-start">
+    <a class="back-link" href="/contracts/{{ contract.id }}">← Back to challenge</a>
     <div class="kicker">Application workspace</div>
-    <h1>Submit your bid.</h1>
-    <p>You are applying to <strong>{{ contract.title }}</strong>. Submit one bid to enter the government evaluation process.</p>
-    <div class="application-placeholder">
-        <span class="feature-number">{{ contract.id }} · {{ contract.type }}</span>
-        <div class="bid-facts">
-            <article><span>Government bid start price</span><strong>₹{{ '{:,.2f}'.format(contract.bidStartPrice or 0) }}</strong></article>
-            <article><span>Current bid price</span><strong>₹{{ '{:,.2f}'.format(contract.currentBidPrice or 0) }}</strong></article>
+    <h1>{{ 'Respond to clarification.' if clarification else 'Your application.' if submitted else 'Apply to this challenge.' }}</h1>
+    <p>Prepare an application for <strong>{{ contract.title }}</strong>. Your startup identity and contact details come from your registered profile.</p>
+
+    <section class="application-context" aria-labelledby="challenge-context-title">
+        <div class="application-context-heading">
+            <div><span class="feature-number">{{ contract.id }} · {{ contract.type }}</span><h2 id="challenge-context-title">Challenge context</h2></div>
+            <span class="contract-status {{ 'active' if not closed else 'review' }}">{{ 'Accepting applications' if not closed else 'Submissions closed' }}</span>
         </div>
-        {% if closed %}
-        <h2>Bidding is closed.</h2>
-        <p>The government has closed bidding for this contract. New applications are no longer accepted.</p>
-        {% else %}
-        <form class="bid-form" data-bid-form="{{ contract.id }}">
-            <label for="bid-amount">Your bid amount</label>
-            <input id="bid-amount" name="amount" type="number" min="{{ contract.currentBidPrice or contract.bidStartPrice or 0.01 }}" step="0.01" required placeholder="Enter amount in INR">
-            <button class="button" type="submit">Submit bid</button>
-            <span class="form-message" data-bid-status role="status"></span>
-        </form>
-        {% endif %}
-        <a class="button outline" href="/startup-portal">Return to dashboard</a>
+        <div class="application-government"><strong>{{ challenge.ministry or 'Government department' }}</strong><span>{{ challenge.department or 'Department not specified' }}</span></div>
+        <div class="application-context-grid">
+            <article><h3>Problem statement</h3><p>{{ (challenge.problemStatement or {}).description or 'No problem statement provided.' }}</p></article>
+            <article><h3>Objectives</h3><pre>{{ (challenge.objectives or []) | tojson(indent=2) }}</pre></article>
+            <article><h3>Requirements</h3><pre>{{ (challenge.requirements or {}) | tojson(indent=2) }}</pre></article>
+            <article><h3>Constraints</h3><pre>{{ (challenge.constraints or {}) | tojson(indent=2) }}</pre></article>
+            <article><h3>Eligibility</h3><pre>{{ (challenge.eligibility or {}) | tojson(indent=2) }}</pre></article>
+            <article><h3>Timeline</h3><pre>{{ (challenge.timeline or {}) | tojson(indent=2) }}</pre></article>
+            <article><h3>Evaluation criteria</h3><pre>{{ (challenge.evaluationCriteria or []) | tojson(indent=2) }}</pre></article>
+        </div>
+    </section>
+
+    <section class="application-profile" aria-label="Registered startup profile">
+        <div><span>Startup</span><strong>{{ profile.business_name }}</strong></div>
+        <div><span>Business ID</span><strong>{{ profile.business_id }}</strong></div>
+        <div><span>Contact email</span><strong>{{ profile.company_email }}</strong></div>
+        <div><span>Contact phone</span><strong>{{ profile.company_phone }}</strong></div>
+    </section>
+
+    {% if closed and not application %}
+    <p class="application-notice">This challenge is not accepting new applications.</p>
+    {% else %}
+    <form class="application-form" data-application-form data-challenge-id="{{ contract.id }}" data-submitted="{{ 'true' if submitted else 'false' }}">
+        <section class="application-form-section">
+            <span class="section-label">01 · Problem understanding</span>
+            <h2>Your understanding</h2>
+            <label>What problem does your startup address?<textarea name="problem_addressed" required {% if locked %}readonly{% endif %}>{{ answers.get('problem_addressed', '') }}</textarea></label>
+            <label>How does your solution address this challenge?<textarea name="challenge_solution" required {% if locked %}readonly{% endif %}>{{ answers.get('challenge_solution', '') }}</textarea></label>
+        </section>
+        <section class="application-form-section">
+            <span class="section-label">02 · Proposed solution</span>
+            <h2>What you will build</h2>
+            <label>Solution description<textarea name="solution_description" required {% if locked %}readonly{% endif %}>{{ answers.get('solution_description', '') }}</textarea></label>
+            <label>Technology or approach<textarea name="technology_approach" required {% if locked %}readonly{% endif %}>{{ answers.get('technology_approach', '') }}</textarea></label>
+            <label>Current development or product stage<input name="development_stage" required value="{{ answers.get('development_stage', '') }}" {% if locked %}readonly{% endif %}></label>
+        </section>
+        <section class="application-form-section">
+            <span class="section-label">03 · Implementation</span>
+            <h2>How you will deliver</h2>
+            <label>Proposed implementation approach<textarea name="implementation_approach" required {% if locked %}readonly{% endif %}>{{ answers.get('implementation_approach', '') }}</textarea></label>
+            <label>Expected timeline<textarea name="expected_timeline" required {% if locked %}readonly{% endif %}>{{ answers.get('expected_timeline', '') }}</textarea></label>
+            <label>Government support or resources required<textarea name="government_support" required {% if locked %}readonly{% endif %}>{{ answers.get('government_support', '') }}</textarea></label>
+        </section>
+        <section class="application-form-section">
+            <span class="section-label">04 · Impact</span>
+            <h2>Expected outcomes</h2>
+            <label>Expected outcomes<textarea name="expected_outcomes" required {% if locked %}readonly{% endif %}>{{ answers.get('expected_outcomes', '') }}</textarea></label>
+            <label>Target users or beneficiaries<textarea name="target_users" required {% if locked %}readonly{% endif %}>{{ answers.get('target_users', '') }}</textarea></label>
+            <label>Expected measurable impact<textarea name="measurable_impact" required {% if locked %}readonly{% endif %}>{{ answers.get('measurable_impact', '') }}</textarea></label>
+        </section>
+        <section class="application-form-section">
+            <span class="section-label">05 · Experience and evidence</span>
+            <h2>Relevant experience</h2>
+            <label>Previous deployments or pilots<textarea name="previous_deployments" {% if locked %}readonly{% endif %}>{{ answers.get('previous_deployments', '') }}</textarea></label>
+            <label>Relevant team or startup experience<textarea name="relevant_experience" {% if locked %}readonly{% endif %}>{{ answers.get('relevant_experience', '') }}</textarea></label>
+            <label>Supporting evidence links or references<textarea name="supporting_evidence" {% if locked %}readonly{% endif %}>{{ answers.get('supporting_evidence', '') }}</textarea></label>
+        </section>
+        <section class="application-form-section">
+            <span class="section-label">06 · Additional information</span>
+            <h2>Anything else?</h2>
+            <label>Additional information relevant to this challenge<textarea name="additional_information" {% if locked %}readonly{% endif %}>{{ answers.get('additional_information', '') }}</textarea></label>
+        </section>
+        {% if clarification %}<section class="application-form-section clarification-response"><span class="section-label">Requested follow-up</span><h2>Clarification response</h2><label>Your response<textarea name="clarification_response" required></textarea></label></section>{% endif %}
+        <div class="application-actions">
+            {% if clarification %}
+            <button class="button" type="submit" name="action" value="respond">Submit clarification</button>
+            {% elif not submitted %}
+            <button class="button outline" type="submit" name="action" value="draft">Save draft</button>
+            {% if not closed %}<button class="button" type="submit" name="action" value="submit">Submit application</button>{% endif %}
+            {% else %}
+            <span class="contract-status active">Submitted · {{ application.submitted_at }}</span>
+            {% endif %}
+            <span class="form-message" data-application-status role="status">{% if application and application.status == 'draft' %}Draft saved · {{ application.updated_at }}{% endif %}</span>
+        </div>
+    </form>
+    {% endif %}
+    <div class="application-id" {% if not application %}hidden{% endif %}>
+        {% if application %}Application {{ application.application_id }}{% endif %}
     </div>
 </main>
 <script>
     document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' };
-    document.querySelector('[data-bid-form]')?.addEventListener('submit', async event => {
+    document.querySelector('[data-application-form]')?.addEventListener('submit', async event => {
         event.preventDefault();
         const form = event.currentTarget;
-        const status = form.querySelector('[data-bid-status]');
-        const response = await fetch(`/api/contracts/${form.dataset.bidForm}/bids`, {
+        const status = form.querySelector('[data-application-status]');
+        const action = event.submitter?.value || 'submit';
+        const applicationData = Object.fromEntries(new FormData(form));
+        delete applicationData.action;
+        status.textContent = 'Saving...';
+        const response = await fetch(`/api/challenges/${form.dataset.challengeId}/applications`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(Object.fromEntries(new FormData(form)))
+            body: JSON.stringify({ action, application_data: applicationData })
         });
         const result = await response.json();
         status.textContent = result.message;
-        if (response.ok) form.reset();
+        if (response.ok) {
+            const id = document.querySelector('.application-id');
+            id.hidden = false;
+            id.textContent = `Application ${result.application.application_id}`;
+            if (action === 'submit') window.location.reload();
+        }
     });
 </script>
 {% endblock %}

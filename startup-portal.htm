@@ -126,6 +126,31 @@
     </div>
 </dialog>
 <script>document.querySelector('.mobile-menu').onclick = () => { const n = document.querySelector('.nav-links'); n.style.display = n.style.display === 'grid' ? '' : 'grid' }; document.querySelectorAll('[data-dialog]').forEach(button => button.onclick = () => document.querySelector('#' + button.dataset.dialog).showModal()); document.querySelectorAll('.dialog-close').forEach(button => button.onclick = () => button.closest('dialog').close()); document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close() }));</script>
+<section class="dashboard-section container" aria-labelledby="my-applications-title">
+    <div class="dashboard-section-head">
+        <div><div class="section-label">Challenge submissions</div><h2 id="my-applications-title">My Applications</h2></div>
+        <span class="section-meta">{{ applications | length }} total</span>
+    </div>
+    <div class="application-list">
+        {% for application in applications %}
+        <article class="application-list-item">
+            <div><span class="contract-code">{{ application.challenge_id }}</span><h3>{{ application.challenge_title }}</h3><p>Application {{ application.application_id }}</p></div>
+            <div class="application-list-meta"><span class="contract-status {{ 'review' if application.status == 'clarification_requested' else 'active' }}">{{ application.status | replace('_', ' ') | title }}</span><p>Submitted {{ application.submitted_at or 'Not submitted' }}</p><p>Updated {{ application.updated_at or 'Not available' }}</p></div>
+            {% if application.status == 'draft' %}
+            <a class="button small application-list-action" href="/contracts/{{ application.challenge_id }}/apply">Continue Application</a>
+            {% elif application.status == 'clarification_requested' %}
+            <a class="button small application-list-action" href="/contracts/{{ application.challenge_id }}/apply">View / Respond</a>
+            {% elif application.status == 'selected' %}
+            <button class="button small application-list-action" type="button" disabled>Proceed to Pilot Agreement</button>
+            {% else %}
+            <a class="button small application-list-action" href="/contracts/{{ application.challenge_id }}/apply">View Application</a>
+            {% endif %}
+        </article>
+        {% else %}
+        <p class="application-empty">No applications yet.</p>
+        {% endfor %}
+    </div>
+</section>
 <section class="container challenge-panel startup-report-panel">
 	<div class="panel-head"><h2>Periodic report notifications</h2><span class="form-note">Phase 1: startup report submission</span></div>
 	<div id="startup-checks" class="report-review-list"><p class="form-note">Loading notifications...</p></div>
