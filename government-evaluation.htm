@@ -1,0 +1,97 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container evaluation-shell">
+    <a class="back-link" href="/government-dashboard">← Back to contracts</a>
+    <section class="evaluation-heading">
+        <div>
+            <div class="kicker">Initial evaluation · {{ challenge.challengeId }}</div>
+            <h1>{{ challenge.title or 'Untitled challenge' }}</h1>
+            <p>Review each startup's application and bid history together before assigning the contract.</p>
+        </div>
+        <span class="status-badge {{ challenge.status | lower }}">{{ challenge.status }}</span>
+    </section>
+
+    <section class="evaluation-summary">
+        <div><span>Bid start price</span><strong>{{ challenge.bidStartPrice or 'Not set' }}</strong></div>
+        <div><span>Current bid</span><strong>{{ challenge.currentBidPrice or challenge.bidStartPrice or 'Not set' }}</strong></div>
+        <div><span>Assigned startup</span><strong id="assigned-startup">{{ challenge.assignedStartupId or 'Not assigned' }}</strong></div>
+    </section>
+
+    <section class="challenge-panel evaluation-panel">
+        <div class="panel-head">
+            <div><h2>Applications and bid history</h2><span class="form-note">One combined view of submitted applications and bids</span></div>
+        </div>
+        <div id="evaluation-list" class="evaluation-list"><p class="form-note">Loading evaluation candidates...</p></div>
+    </section>
+</main>
+<script>
+    const challengeId = {{ challenge.challengeId | tojson }};
+    const evaluationList = document.getElementById('evaluation-list');
+    const assignedStartup = document.getElementById('assigned-startup');
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
+    }
+
+    function formatBidHistory(bids) {
+        if (!bids.length) return '<span class="evaluation-muted">No bids submitted</span>';
+        return bids.slice().reverse().map(bid => `<span>₹${Number(bid.amount || 0).toLocaleString('en-IN')} · ${escapeHtml(bid.submittedAt || 'Date unavailable')}</span>`).join('');
+    }
+
+    async function loadEvaluation() {
+        const response = await fetch(`/api/challenges/${challengeId}/evaluation`);
+        const result = await response.json();
+        if (!response.ok) {
+            evaluationList.innerHTML = `<p class="form-note">${escapeHtml(result.message || 'Evaluation data could not be loaded.')}</p>`;
+            return;
+        }
+        const evaluation = result.evaluation;
+        assignedStartup.textContent = evaluation.assignedStartupId || 'Not assigned';
+        if (!evaluation.candidates.length) {
+            evaluationList.innerHTML = '<p class="form-note">No applications or bids have been submitted yet.</p>';
+            return;
+        }
+        evaluationList.innerHTML = evaluation.candidates.map(candidate => `
+            <article class="evaluation-card">
+                <div class="evaluation-card-head">
+                    <div><span class="challenge-id">${escapeHtml(candidate.startupId)}</span><h3>${escapeHtml(candidate.startupName)}</h3></div>
+                    <span class="status-badge ${candidate.applicationStatus === 'submitted' ? 'published' : 'review'}">${escapeHtml(candidate.applicationStatus)}</span>
+                </div>
+                <div class="evaluation-meta"><span>Application: ${escapeHtml(candidate.applicationId || 'None')}</span><span>Submitted: ${escapeHtml(candidate.submittedAt || 'Not submitted')}</span><span>Bids: ${candidate.bids.length}</span></div>
+                <div class="evaluation-grid">
+                    <div><strong>Bid history</strong><div class="bid-history">${formatBidHistory(candidate.bids)}</div></div>
+                    <div><strong>Application snapshot</strong><p>${escapeHtml(candidate.applicationData.solution_description || candidate.applicationData.challenge_solution || 'No application narrative submitted.')}</p></div>
+                </div>
+                <button class="button small evaluation-assign" type="button" data-startup-id="${escapeHtml(candidate.startupId)}" ${evaluation.assignedStartupId === candidate.startupId ? 'disabled' : ''}>${evaluation.assignedStartupId === candidate.startupId ? 'Assigned startup' : 'Assign contract'}</button>
+                <span class="form-message" data-evaluation-status></span>
+            </article>`).join('');
+        document.querySelectorAll('.evaluation-assign').forEach(button => {
+            button.onclick = () => assignStartup(button);
+        });
+    }
+
+    async function assignStartup(button) {
+        button.disabled = true;
+        const status = button.parentElement.querySelector('[data-evaluation-status]');
+        const response = await fetch(`/api/challenges/${challengeId}/assignment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ startupId: button.dataset.startupId })
+        });
+        const result = await response.json();
+        status.textContent = result.message;
+        if (response.ok) {
+            assignedStartup.textContent = button.dataset.startupId;
+            document.querySelectorAll('.evaluation-assign').forEach(item => {
+                item.disabled = item !== button;
+                item.textContent = item === button ? 'Assigned startup' : 'Assign contract';
+            });
+        } else {
+            button.disabled = false;
+        }
+    }
+
+    loadEvaluation();
+</script>
+{% endblock %}

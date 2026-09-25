@@ -21,6 +21,7 @@ from database import (
     list_startup_applications,
     save_challenge_contract,
     save_application,
+    set_application_status,
     list_startup_directory,
     save_contract_report,
     save_startup_registration,
@@ -144,6 +145,7 @@ SAMPLE_CONTRACTS = {
         "application_deadline": "02 September 2026",
         "type": "Health-tech",
         "status": "start bidding",
+        "assignedStartupId": None,
         "bidStartPrice": 5000000,
         "currentBidPrice": 5000000,
     }
@@ -187,6 +189,7 @@ def _default_challenge(template_key="software"):
         "challengeType": template["challengeType"],
         "difficulty": template["difficulty"],
         "status": "created",
+        "assignedStartupId": None,
         "createdAt": _now_iso(),
         "updatedAt": _now_iso(),
         "department": "",
@@ -345,12 +348,52 @@ def _contract_view(contract_id):
             "bidStartPrice": challenge.get("bidStartPrice", 0),
             "currentBidPrice": challenge.get("currentBidPrice", challenge.get("bidStartPrice", 0)),
             "bids": challenge.get("bids", []),
+            "assignedStartupId": challenge.get("assignedStartupId"),
             "challenge": challenge,
         }
     if contract:
         contract = dict(contract)
         contract["applications"] = _challenge_application_count(contract_id)
     return contract
+
+
+def _government_evaluation(challenge):
+    """Merge submitted applications with the bid history for initial review."""
+    applications = list_challenge_applications(challenge.get("challengeId"))
+    bids_by_startup = {}
+    for bid in challenge.get("bids", []):
+        startup_id = str(bid.get("startupId") or "").strip()
+        if startup_id:
+            bids_by_startup.setdefault(startup_id, []).append(bid)
+
+    candidates = {}
+    for application in applications:
+        startup_id = application.get("business_id")
+        if startup_id:
+            candidates[startup_id] = {
+                "startupId": startup_id,
+                "startupName": application.get("startup_name") or startup_id,
+                "applicationId": application.get("application_id"),
+                "applicationStatus": application.get("status"),
+                "submittedAt": application.get("submitted_at"),
+                "applicationData": application.get("application_data") or {},
+                "bids": bids_by_startup.pop(startup_id, []),
+            }
+    for startup_id, bids in bids_by_startup.items():
+        candidates[startup_id] = {
+            "startupId": startup_id,
+            "startupName": startup_id,
+            "applicationId": None,
+            "applicationStatus": "No application",
+            "submittedAt": None,
+            "applicationData": {},
+            "bids": bids,
+        }
+    return {
+        "challengeId": challenge.get("challengeId"),
+        "assignedStartupId": challenge.get("assignedStartupId"),
+        "candidates": sorted(candidates.values(), key=lambda item: item.get("startupName", "").casefold()),
+    }
 
 
 def _challenge_application_count(challenge_id):
@@ -710,6 +753,73 @@ def public_challenges_api():
 @session_required("ministry")
 def government_dashboard():
     return render_template("government-dashboard.htm", challenges=_serialize_challenges())
+
+
+@app.get("/government-evaluation/<challenge_id>")
+@session_required("ministry")
+def government_evaluation(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("Challenge not found", 404)
+    return render_template("government-evaluation.htm", challenge=challenge)
+
+
+@app.get("/api/challenges/<challenge_id>/evaluation")
+def government_evaluation_api(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if challenge.get("createdBy") != session.get("ministry_id"):
+        return jsonify({"ok": False, "message": "You are not authorized to evaluate this challenge."}), 403
+    try:
+        return jsonify({"ok": True, "evaluation": _government_evaluation(challenge)})
+    except Exception:
+        app.logger.exception("Could not load evaluation data for %s.", challenge_id)
+        return jsonify({"ok": False, "message": "Evaluation data is temporarily unavailable."}), 503
+
+
+@app.post("/api/challenges/<challenge_id>/assignment")
+def assign_challenge_startup(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if challenge.get("createdBy") != session.get("ministry_id"):
+        return jsonify({"ok": False, "message": "You are not authorized to assign this challenge."}), 403
+    startup_id = str((request.get_json(silent=True) or {}).get("startupId") or "").strip()
+    if not startup_id:
+        return jsonify({"ok": False, "message": "Choose a startup before assigning the contract."}), 400
+    try:
+        evaluation = _government_evaluation(challenge)
+    except Exception:
+        app.logger.exception("Could not load candidates for %s.", challenge_id)
+        return jsonify({"ok": False, "message": "Evaluation data is temporarily unavailable."}), 503
+    candidate = next((item for item in evaluation["candidates"] if item["startupId"] == startup_id), None)
+    if not candidate:
+        return jsonify({"ok": False, "message": "That startup is not part of this challenge's bid or application history."}), 400
+    challenge["assignedStartupId"] = startup_id
+    challenge["assignedAt"] = _now_iso()
+    challenge["assignedBidAmount"] = max((float(item.get("amount", 0) or 0) for item in candidate["bids"]), default=0)
+    challenge["status"] = "Ongoing"
+    challenge["updatedAt"] = _now_iso()
+    store = _read_store()
+    for bucket in ("drafts", "published"):
+        if challenge.get("id") in store.get(bucket, {}):
+            store[bucket][challenge["id"]] = challenge
+            break
+    _write_store(store)
+    _persist_contract(challenge)
+    if candidate.get("applicationId"):
+        try:
+            set_application_status(candidate["applicationId"], "selected")
+        except Exception:
+            app.logger.exception("Contract %s was assigned but its application status could not be updated.", challenge_id)
+    return jsonify({"ok": True, "challenge": challenge, "message": "Contract assigned and moved to ongoing."})
 
 
 @app.get("/create-challenge")
@@ -1135,7 +1245,17 @@ def startup_portal():
     for application in applications:
         challenge = _challenge_by_id(application["challenge_id"])
         application["challenge_title"] = challenge.get("title") if challenge else "Challenge no longer available"
-    return render_template("startup-portal.htm", profile=profile, available_challenges=available_challenges, applications=applications)
+    assigned_contracts = [
+        challenge for challenge in _serialize_challenges()
+        if challenge.get("assignedStartupId") == session["business_id"]
+    ]
+    return render_template(
+        "startup-portal.htm",
+        profile=profile,
+        available_challenges=available_challenges,
+        applications=applications,
+        assigned_contracts=assigned_contracts,
+    )
 
 
 @app.get("/company-profile")

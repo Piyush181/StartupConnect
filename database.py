@@ -458,6 +458,24 @@ def get_application(application_id: str, business_id: str) -> dict[str, Any] | N
         connection.close()
 
 
+def set_application_status(application_id: str, status: str) -> None:
+    """Update the evaluation status for a submitted application."""
+    if status not in {"submitted", "selected"}:
+        raise ValueError("Application status is not supported.")
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(APPLICATIONS_SCHEMA_SQL)
+        cursor.execute(
+            "UPDATE applications SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE application_id = %s",
+            (status, application_id),
+        )
+        connection.commit()
+    finally:
+        cursor.close()
+        connection.close()
+
+
 def get_startup_application(challenge_id: str, business_id: str) -> dict[str, Any] | None:
     """Load the authenticated startup's application for one challenge."""
     connection = _open_connection()
