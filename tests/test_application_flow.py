@@ -224,6 +224,21 @@ class ApplicationFlowTests(unittest.TestCase):
             "/api/challenges/GOV-APPLY-001/applications", json={"action": "draft", "application_data": {}}
         ).status_code, 401)
 
+    def test_both_roles_can_return_to_login_and_switch_accounts(self):
+        for role in ("startup", "ministry"):
+            client = app.test_client()
+            with client.session_transaction() as session:
+                session["role"] = role
+            page = client.get("/login")
+            content = page.get_data(as_text=True)
+            self.assertEqual(page.status_code, 200)
+            self.assertIn("Startup sign in", content)
+            self.assertIn("Ministry sign in", content)
+            self.assertIn("Switch account", content)
+            self.assertIn("Sign out", content)
+            self.assertEqual(client.post("/api/logout").status_code, 200)
+            self.assertIn("Sign in", client.get("/login").get_data(as_text=True))
+
     def test_startup_page_shows_restored_sample_challenges_and_my_applications(self):
         content = self._startup_client().get("/startup-portal").get_data(as_text=True)
         self.assertIn("My Applications", content)

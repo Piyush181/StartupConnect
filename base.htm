@@ -19,17 +19,28 @@
             <a href="/directory">Startup directory</a>
             <a href="/how-it-works">How it works</a>
             <a href="/public-challenges">Public challenges</a>
+            {% if session.get("role") in ["startup", "ministry", "government"] %}
+            <a href="/login">Switch account</a>
+            {% endif %}
         </nav>
         <div class="nav-actions">
             {% if session.get("role") not in ["startup", "ministry", "government"] %}
             <a href="/login">Sign in</a>
             <a class="button" href="/join">Join the network</a>
+            {% else %}
+            <button class="button outline" type="button" data-sign-out>Sign out</button>
             {% endif %}
             <button class="mobile-menu" aria-label="Open menu">☰</button>
         </div>
     </header>
 
     {% block content %}{% endblock %}
+    <script>
+        document.querySelector('[data-sign-out]')?.addEventListener('click', async () => {
+            const response = await fetch('/api/logout', { method: 'POST' });
+            if (response.ok) window.location.assign('/login');
+        });
+    </script>
 </body>
 
 </html>
