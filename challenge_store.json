@@ -2,7 +2,7 @@
   "drafts": {},
   "published": {
     "gov-2026-00001": {
-      "title": "AI Mobility and Route Optimization Platform",
+      "title": "AI Waste Monitoring for Municipal Compliance",
       "challengeId": "GOV-2026-00001",
       "challengeType": "Software",
       "category": "AI / ML",
@@ -16,8 +16,8 @@
       "state": "Maharashtra",
       "status": "start bidding",
       "problemStatement": {
-        "description": "We want to create chatbots for teaching traffic rules",
-        "currentSituation": "The current process for urban mobility networks and emergency transport operations is not yet described in enough detail and should be confirmed by the Ministry officer.",
+        "description": "Optimizing Decarbonization and Grid Resilience: Developing AI-driven software or localized energy storage solutions to help municipal grids balance renewable energy inputs and prevent blackouts during peak demand.",
+        "currentSituation": "The current process for municipal teams and citizen reporting workflows is not yet described in enough detail and should be confirmed by the Ministry officer.",
         "painPoints": [
           "Existing workflows may be manual or fragmented",
           "Relevant information may be difficult to monitor consistently",
@@ -167,14 +167,14 @@
         "internalOfficerName": ""
       },
       "challengeCategory": "AI / ML",
-      "challengeTitle": "AI Mobility and Route Optimization Platform",
+      "challengeTitle": "AI Waste Monitoring for Municipal Compliance",
       "governmentBody": "Maharashtra State Innovation Society",
       "reviewIndicators": [
         "AI Suggested",
         "Review Recommended"
       ],
       "template": "ai",
-      "updatedAt": "2026-09-25T20:50:54Z",
+      "updatedAt": "2026-09-25T20:54:52Z",
       "createdBy": "admin",
       "id": "gov-2026-00001"
     }
