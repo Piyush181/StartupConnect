@@ -411,16 +411,6 @@
                         <small>Define how much each criterion contributes to the final evaluation. Total must equal 100%.</small>
                     </div>
                 </fieldset>
-                <fieldset class="form-section">
-                    <legend>Final Selection Configuration</legend>
-                    <div class="form-grid">
-                        <div class="form-field">
-                            <label for="maximum-selected-startups">Maximum selected startups</label>
-                            <input id="maximum-selected-startups" type="number" min="1" step="1" placeholder="No limit">
-                            <small>Optional. Leave blank to allow the ministry to select any number of shortlisted startups.</small>
-                        </div>
-                    </div>
-                </fieldset>
             </div>
 
             <div class="challenge-step-panel" data-step="10" hidden>
@@ -544,7 +534,6 @@
         ministry: '',
         state: '',
         status: 'created',
-        assignedStartupId: null,
         problemStatement: {
             title: '',
             description: '',
@@ -588,7 +577,6 @@
             { criterion: 'Usability', description: 'Ease of use and adoption', weight: 15 },
             { criterion: 'Impact', description: 'Public value and operational benefit', weight: 15 }
         ],
-        selectionConfiguration: {},
         eligibility: {
             participantTypes: ['Open to All'],
             minTeamSize: 1,
@@ -735,7 +723,6 @@
         document.getElementById('submission-deadline').value = challengeState.timeline?.submissionDeadline || '';
         document.getElementById('evaluation-start').value = challengeState.timeline?.evaluationStart || '';
         document.getElementById('results-date').value = challengeState.timeline?.resultsDate || '';
-        document.getElementById('maximum-selected-startups').value = challengeState.selectionConfiguration?.maximumSelectedStartups || '';
         document.getElementById('public-department').value = challengeState.contact?.publicDepartment || '';
         document.getElementById('nodal-officer').value = challengeState.contact?.nodalOfficerName || '';
         document.getElementById('designation').value = challengeState.contact?.designation || '';
@@ -1064,11 +1051,6 @@
             description: row.querySelector('textarea').value.trim(),
             weight: Number(row.querySelector('input[name="weight"]').value || 0)
         })).filter(item => item.criterion || item.description || item.weight);
-
-        const maximumSelectedStartups = document.getElementById('maximum-selected-startups').value;
-        challengeState.selectionConfiguration = maximumSelectedStartups
-            ? { maximumSelectedStartups: Number(maximumSelectedStartups) }
-            : {};
 
         challengeState.eligibility = {
             participantTypes: challengeState.eligibility?.participantTypes || [],

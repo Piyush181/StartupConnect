@@ -1,47 +1,28 @@
 {% extends "base.htm" %}
 
 {% block content %}
-{% set draft_count = challenges | selectattr('status', 'equalto', 'created') | list | length %}
-{% set published_count = challenges | selectattr('status', 'equalto', 'start bidding') | list | length %}
-{% set active_count = challenges | selectattr('status', 'equalto', 'Ongoing') | list | length %}
-<main class="container dashboard-shell">
-    <section class="dashboard-header">
-        <div>
-            <div class="kicker">Ministry workspace</div>
-            <h1>Challenge operations</h1>
-            <p class="dashboard-subtitle">Create public challenges, manage submissions, and follow scheduled progress checks.</p>
-        </div>
-        <a class="button" href="/create-challenge">+ Create New Challenge</a>
-    </section>
-
-    <section class="stat-grid" aria-label="Challenge summary">
-        <article class="stat-card"><span class="stat-label">Drafts</span><strong>{{ draft_count }}</strong></article>
-        <article class="stat-card"><span class="stat-label">Published</span><strong>{{ published_count }}</strong></article>
-        <article class="stat-card"><span class="stat-label">Active</span><strong>{{ active_count }}</strong></article>
-    </section>
-
-    <section class="challenge-panel">
-        <div class="panel-head"><h2>Ministry workspace</h2></div>
-        <div class="feature-grid">
-            <article class="feature">
-                <span class="feature-number">01 / CHALLENGES</span>
-                <h3>Create a challenge</h3>
-                <p>Draft a problem brief, define requirements, then publish it for startups.</p>
-                <a class="text-button" href="/create-challenge">Create New Challenge <span>↗</span></a>
-            </article>
-            <article class="feature">
-                <span class="feature-number">02 / PORTFOLIO</span>
-                <h3>Manage challenges</h3>
-                <p>Review drafts and published challenges, update bidding, and track startup progress.</p>
-                <a class="text-button" href="/government-dashboard">Open challenge portfolio <span>↗</span></a>
-            </article>
-            <article class="feature">
-                <span class="feature-number">03 / PERIODIC CHECKS</span>
-                <h3>Schedule and review reports</h3>
-                <p>Manage reporting schedules and review submitted startup progress reports.</p>
-                <a class="text-button" href="/periodic-checks">Open periodic checks <span>↗</span></a>
-            </article>
-        </div>
-    </section>
+<main class="container page-hero">
+    <div class="kicker">Ministry workspace</div>
+    <h1>Turn a public need into a clear brief.</h1>
+    <p>Frame outcome-led challenges, review capable teams and track the pilots that are moving your department forward.
+    </p>
+    <div class="hero-actions"><a class="button" href="/challenges">Manage challenges</a><a class="button outline"
+            href="/how-it-works">Review the mechanism</a></div>
 </main>
+<section class="container page-content">
+    <div class="feature-grid">
+        <article class="feature"><span class="feature-number">01 / BRIEFS</span>
+            <h3>Frame a challenge</h3>
+            <p>Describe the outcome, context and constraints without prescribing a solution.</p>
+        </article>
+        <article class="feature"><span class="feature-number">02 / REVIEW</span>
+            <h3>Evaluate fairly</h3>
+            <p>Use structured criteria and independent validation to compare applications with confidence.</p>
+        </article>
+        <article class="feature"><span class="feature-number">03 / PILOTS</span>
+            <h3>Track public value</h3>
+            <p>Keep milestones, performance evidence and scale decisions visible in one place.</p>
+        </article>
+    </div>
+</section>
 {% endblock %}
