@@ -540,6 +540,33 @@ def list_challenge_applications(challenge_id: str) -> list[dict[str, Any]]:
         connection.close()
 
 
+def get_government_application(application_id: str) -> dict[str, Any] | None:
+    """Load one submitted application for ministry-side, challenge-authorized access."""
+    connection = _open_connection()
+    cursor = connection.cursor()
+    try:
+        cursor.execute(APPLICATIONS_SCHEMA_SQL)
+        cursor.execute(SCHEMA_SQL)
+        cursor.execute(
+            """SELECT a.application_id, a.challenge_id, a.business_id_encrypted,
+                      a.status, a.application_data, a.submitted_at, a.updated_at,
+                      r.business_name
+               FROM applications a LEFT JOIN startup_registrations r
+                 ON r.business_id_hash = a.business_id_hash
+               WHERE a.application_id = %s AND a.status <> 'draft'""",
+            (application_id,),
+        )
+        row = cast(tuple[Any, ...] | None, cursor.fetchone())
+        if not row:
+            return None
+        application = _application_from_row(row[:7])
+        application["startup_name"] = row[7] or application["business_id"]
+        return application
+    finally:
+        cursor.close()
+        connection.close()
+
+
 def get_startup_profile(business_id: str) -> dict[str, Any] | None:
     """Fetch the non-sensitive company profile for the authenticated startup."""
     cipher = _cipher()

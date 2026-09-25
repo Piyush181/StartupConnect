@@ -16,6 +16,7 @@ from database import (
     count_challenge_applications,
     get_startup_profile,
     get_startup_application,
+    get_government_application,
     get_application,
     list_challenge_applications,
     list_startup_applications,
@@ -149,6 +150,93 @@ SAMPLE_CONTRACTS = {
     }
 }
 
+SAMPLE_CHALLENGE_RECORDS = [
+    {
+        "challengeId": "PS-MH-038",
+        "title": "Low-cost remote screening for diabetic retinopathy",
+        "department": "Public Health Department",
+        "ministry": "Public Health Department, Government of Maharashtra",
+        "category": "Health-tech",
+        "challengeType": "Software",
+        "description": "Help frontline health workers identify diabetic retinopathy risk earlier and route patients for timely clinical review.",
+        "budget": "₹50–75 lakh",
+        "budgetAmount": 5000000,
+        "deadline": "2027-02-28",
+        "objectives": ["Support low-bandwidth screening", "Improve referral follow-up"],
+        "requirements": ["Works on mobile devices", "Supports Marathi and English", "Protects patient data"],
+    },
+    {
+        "challengeId": "PS-MH-045",
+        "title": "Water quality monitoring for rural supply networks",
+        "department": "Water Resources Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Climate-tech",
+        "challengeType": "Hardware",
+        "description": "Improve the timeliness and coverage of water quality monitoring across rural supply networks.",
+        "budget": "₹25–40 lakh",
+        "budgetAmount": 2500000,
+        "deadline": "2027-03-31",
+        "objectives": ["Detect water quality issues earlier", "Support field response"],
+        "requirements": ["Field-ready monitoring", "Offline-capable reporting", "Maintenance plan"],
+    },
+    {
+        "challengeId": "PS-MH-047",
+        "title": "Accessible digital services for citizen centres",
+        "department": "General Administration Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Gov-tech",
+        "challengeType": "Software",
+        "description": "Make common government services more accessible through assisted digital workflows at citizen centres.",
+        "budget": "₹35–55 lakh",
+        "budgetAmount": 3500000,
+        "deadline": "2027-04-30",
+        "objectives": ["Reduce service completion time", "Improve accessibility"],
+        "requirements": ["Accessible user experience", "Audit trail", "Multilingual support"],
+    },
+    {
+        "challengeId": "PS-MH-050",
+        "title": "Smart traffic signal coordination",
+        "department": "Urban Development Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Mobility",
+        "challengeType": "Hybrid",
+        "description": "Coordinate traffic signals using current road conditions to reduce congestion and improve travel reliability.",
+        "budget": "₹60–90 lakh",
+        "budgetAmount": 6000000,
+        "deadline": "2027-05-31",
+        "objectives": ["Reduce intersection delays", "Provide operational visibility"],
+        "requirements": ["Integrates with existing signals", "Provides operator controls", "Reports measurable outcomes"],
+    },
+    {
+        "challengeId": "PS-MH-052",
+        "title": "Primary school nutrition tracking",
+        "department": "School Education Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Health-tech",
+        "challengeType": "Software",
+        "description": "Help schools and local administrators track nutrition program delivery and identify service gaps.",
+        "budget": "₹20–30 lakh",
+        "budgetAmount": 2000000,
+        "deadline": "2027-06-30",
+        "objectives": ["Improve delivery visibility", "Identify underserved schools"],
+        "requirements": ["Simple school workflows", "Privacy-conscious records", "Exportable reports"],
+    },
+    {
+        "challengeId": "PS-MH-055",
+        "title": "Marathi language public assistant",
+        "department": "Information Technology Department",
+        "ministry": "Government of Maharashtra",
+        "category": "AI / ML",
+        "challengeType": "Software",
+        "description": "Provide a Marathi-first digital assistant that helps residents find reliable public service information.",
+        "budget": "₹40–60 lakh",
+        "budgetAmount": 4000000,
+        "deadline": "2027-07-31",
+        "objectives": ["Improve access to service information", "Support Marathi-language queries"],
+        "requirements": ["Grounded in approved public information", "Escalation to official channels", "Usage reporting"],
+    },
+]
+
 
 def _now_iso():
     return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -262,8 +350,50 @@ def _serialize_challenges():
     return sorted(challenges, key=lambda item: item.get("updatedAt", ""), reverse=True)
 
 
-def _challenge_by_id(challenge_id):
-    return next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id or item.get("id") == challenge_id), None)
+def _sample_challenges():
+    challenges = []
+    for sample in SAMPLE_CHALLENGE_RECORDS:
+        challenges.append({
+            "id": f"sample-{sample['challengeId'].lower()}",
+            "challengeId": sample["challengeId"],
+            "title": sample["title"],
+            "status": "start bidding",
+            "category": sample["category"],
+            "challengeType": sample["challengeType"],
+            "difficulty": "Intermediate",
+            "ministry": sample["ministry"],
+            "department": sample["department"],
+            "state": "Maharashtra",
+            "createdBy": "sample-fixture",
+            "isSample": True,
+            "bidStartPrice": sample["budgetAmount"],
+            "currentBidPrice": sample["budgetAmount"],
+            "problemStatement": {"description": sample["description"], "impact": sample["description"]},
+            "objectives": sample["objectives"],
+            "requirements": {"mandatory": sample["requirements"], "optional": []},
+            "constraints": {"budget": {"estimatedBudget": sample["budget"], "budgetType": "Indicative"}},
+            "eligibility": {"participantTypes": ["Startups"], "minTeamSize": "1", "maxTeamSize": "10", "requiredSkills": []},
+            "timeline": {"registrationOpen": "2026-09-26", "registrationClose": sample["deadline"], "submissionOpen": "2026-09-26", "submissionDeadline": sample["deadline"], "evaluationStart": "", "resultsDate": ""},
+            "evaluationCriteria": [
+                {"criterion": "Technical Quality", "description": "Solution quality and feasibility", "weight": 40},
+                {"criterion": "Public Impact", "description": "Expected public-service impact", "weight": 35},
+                {"criterion": "Scalability", "description": "Operational scalability", "weight": 25},
+            ],
+            "createdAt": "2026-09-26T00:00:00Z",
+            "updatedAt": "2026-09-26T00:00:00Z",
+        })
+    return challenges
+
+
+def _discoverable_challenges():
+    real_challenges = _serialize_challenges()
+    real_ids = {item.get("challengeId") for item in real_challenges}
+    return real_challenges + [item for item in _sample_challenges() if item.get("challengeId") not in real_ids]
+
+
+def _challenge_by_id(challenge_id, include_samples=False):
+    challenges = _discoverable_challenges() if include_samples else _serialize_challenges()
+    return next((item for item in challenges if item.get("challengeId") == challenge_id or item.get("id") == challenge_id), None)
 
 
 APPLICATION_FIELDS = {
@@ -323,7 +453,7 @@ def _startup_is_eligible(challenge, profile):
 
 def _contract_view(contract_id):
     contract = SAMPLE_CONTRACTS.get(contract_id.upper())
-    challenge = _challenge_by_id(contract_id)
+    challenge = _challenge_by_id(contract_id, include_samples=True)
     if challenge:
         problem = challenge.get("problemStatement") or {}
         budget = (challenge.get("constraints") or {}).get("budget") or {}
@@ -346,6 +476,7 @@ def _contract_view(contract_id):
             "currentBidPrice": challenge.get("currentBidPrice", challenge.get("bidStartPrice", 0)),
             "bids": challenge.get("bids", []),
             "challenge": challenge,
+            "is_sample": bool(challenge.get("isSample")),
         }
     if contract:
         contract = dict(contract)
@@ -386,6 +517,7 @@ def _public_challenge(challenge):
         bids_received = 0
     return {
         "challengeId": challenge.get("challengeId"),
+        "isSample": bool(challenge.get("isSample")),
         "title": challenge.get("title"),
         "status": challenge.get("status"),
         "category": challenge.get("category"),
@@ -637,7 +769,7 @@ def _generate_ai_draft(description, additional_requirements="", ministry_context
 
 @app.get("/")
 def home():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     try:
         startup_count = len(list_startup_directory())
     except Exception:
@@ -688,13 +820,13 @@ def challenges():
 
 @app.get("/public-challenges")
 def public_challenges():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     return render_template("public-challenges.htm", challenges=challenges)
 
 
 @app.get("/public-challenges/<challenge_id>")
 def public_challenge_view(challenge_id):
-    challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
+    challenge = next((item for item in _discoverable_challenges() if item.get("challengeId") == challenge_id), None)
     if not challenge or challenge.get("status") not in {"start bidding", "Ongoing", "Completed"}:
         return ("Challenge not found", 404)
     return render_template("public-challenge-view.htm", challenge=_public_challenge(challenge))
@@ -702,7 +834,7 @@ def public_challenge_view(challenge_id):
 
 @app.get("/api/public/challenges")
 def public_challenges_api():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     return jsonify({"ok": True, "challenges": challenges})
 
 
@@ -950,7 +1082,7 @@ def startup_periodic_checks():
     startup_id = session.get("business_id") or "startup-user"
     checks = []
     for challenge in _serialize_challenges():
-        if challenge.get("status") != "Published":
+        if challenge.get("status") not in {"Published", "start bidding"}:
             continue
         for check in challenge.get("periodicChecks", []):
             reports = [report for report in check.get("reports", []) if report.get("startupId") == startup_id]
@@ -1126,14 +1258,14 @@ def startup_portal():
     if not profile:
         session.clear()
         return redirect("/login")
-    available_challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "start bidding"]
+    available_challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") == "start bidding"]
     try:
         applications = list_startup_applications(session["business_id"])
     except Exception:
         app.logger.exception("Could not load applications for the startup portal.")
         applications = []
     for application in applications:
-        challenge = _challenge_by_id(application["challenge_id"])
+        challenge = _challenge_by_id(application["challenge_id"], include_samples=True)
         application["challenge_title"] = challenge.get("title") if challenge else "Challenge no longer available"
     return render_template("startup-portal.htm", profile=profile, available_challenges=available_challenges, applications=applications)
 
@@ -1180,7 +1312,7 @@ def start_contract_application(contract_id):
 def save_startup_application(challenge_id):
     if session.get("role") != "startup" or not session.get("business_id"):
         return jsonify({"ok": False, "message": "Startup authentication required."}), 401
-    challenge = _challenge_by_id(challenge_id)
+    challenge = _challenge_by_id(challenge_id, include_samples=True)
     if not challenge:
         return jsonify({"ok": False, "message": "Challenge not found."}), 404
     payload = request.get_json(silent=True) or {}
@@ -1285,6 +1417,26 @@ def government_challenge_applications_api(challenge_id):
     except Exception:
         app.logger.exception("Could not load government applications for %s.", challenge_id)
         return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+
+
+@app.get("/api/government/applications/<application_id>")
+def government_application_api(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application = get_government_application(application_id)
+    except Exception:
+        app.logger.exception("Could not load government application %s.", application_id)
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+    if not application:
+        return jsonify({"ok": False, "message": "Application not found."}), 404
+    challenge = _challenge_by_id(application["challenge_id"])
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if challenge.get("createdBy") != session.get("ministry_id"):
+        return jsonify({"ok": False, "message": "You are not authorized to view this application."}), 403
+    return jsonify({"ok": True, "application": application})
 
 
 @app.post("/api/contracts/<contract_id>/bids")

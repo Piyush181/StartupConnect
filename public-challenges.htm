@@ -24,7 +24,10 @@
                             <span>{{ challenge.difficulty or 'All levels' }}</span>
                         </div>
                     </div>
-                    <span class="status-badge published">{{ challenge.status }}</span>
+                    <div class="challenge-meta">
+                        <span class="status-badge published">{{ challenge.status }}</span>
+                        {% if challenge.isSample %}<span class="status-badge review">Sample record</span>{% endif %}
+                    </div>
                 </div>
 
                 <div class="public-government-strip">
