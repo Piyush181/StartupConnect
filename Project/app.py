@@ -136,6 +136,9 @@ SAMPLE_CONTRACTS = {
         "application_deadline": "02 September 2026",
         "applications": 18,
         "type": "Health-tech",
+        "status": "start bidding",
+        "bidStartPrice": 5000000,
+        "currentBidPrice": 5000000,
     }
 }
 
@@ -247,9 +250,42 @@ def _serialize_challenges():
         for entry in store.get(bucket, {}).values():
             challenge = dict(entry)
             status = challenge.get("status", "created")
-            challenge["status"] = {"Draft": "created", "Published": "currently bidding"}.get(status, status)
+            challenge["status"] = {"Draft": "created", "Published": "start bidding", "currently bidding": "start bidding"}.get(status, status)
             challenges.append(challenge)
     return sorted(challenges, key=lambda item: item.get("updatedAt", ""), reverse=True)
+
+
+def _challenge_by_id(challenge_id):
+    return next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id or item.get("id") == challenge_id), None)
+
+
+def _contract_view(contract_id):
+    contract = SAMPLE_CONTRACTS.get(contract_id.upper())
+    challenge = _challenge_by_id(contract_id)
+    if challenge:
+        problem = challenge.get("problemStatement") or {}
+        budget = (challenge.get("constraints") or {}).get("budget") or {}
+        return {
+            "id": challenge.get("challengeId"),
+            "title": challenge.get("title") or "Untitled challenge",
+            "ministry": challenge.get("ministry") or "Government of Maharashtra",
+            "sub_ministry": challenge.get("department") or "Government department",
+            "description": problem.get("description") or "Challenge details are being prepared.",
+            "solution_parameters": (challenge.get("requirements") or {}).get("mandatory", []),
+            "deadline": (challenge.get("timeline") or {}).get("submissionDeadline") or "To be announced",
+            "budget": budget.get("estimatedBudget") or "To be announced",
+            "timeline": "See challenge timeline for delivery milestones.",
+            "milestones": [],
+            "application_deadline": (challenge.get("timeline") or {}).get("submissionDeadline") or "To be announced",
+            "applications": len((challenge.get("startupEngagement") or {}).get("startups", [])),
+            "type": challenge.get("challengeType") or "Open innovation",
+            "status": challenge.get("status"),
+            "bidStartPrice": challenge.get("bidStartPrice", 0),
+            "currentBidPrice": challenge.get("currentBidPrice", challenge.get("bidStartPrice", 0)),
+            "bids": challenge.get("bids", []),
+            "challenge": challenge,
+        }
+    return contract
 
 
 def _persist_contract(challenge):
@@ -311,6 +347,8 @@ def _public_challenge(challenge):
         "evaluationCriteria": challenge.get("evaluationCriteria", []),
         "eligibility": challenge.get("eligibility", {}),
         "timeline": timeline,
+        "bidStartPrice": challenge.get("bidStartPrice", 0),
+        "currentBidPrice": challenge.get("currentBidPrice", challenge.get("bidStartPrice", 0)),
         "resources": {
             "dataProvided": resources.get("dataProvided"),
             "datasetType": resources.get("datasetType", []),
@@ -525,7 +563,7 @@ def _generate_ai_draft(description, additional_requirements="", ministry_context
 
 @app.get("/")
 def home():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"currently bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     try:
         startup_count = len(list_startup_directory())
     except Exception:
@@ -576,21 +614,21 @@ def challenges():
 
 @app.get("/public-challenges")
 def public_challenges():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"currently bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     return render_template("public-challenges.htm", challenges=challenges)
 
 
 @app.get("/public-challenges/<challenge_id>")
 def public_challenge_view(challenge_id):
     challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
-    if not challenge or challenge.get("status") not in {"currently bidding", "Ongoing", "Completed"}:
+    if not challenge or challenge.get("status") not in {"start bidding", "Ongoing", "Completed"}:
         return ("Challenge not found", 404)
     return render_template("public-challenge-view.htm", challenge=_public_challenge(challenge))
 
 
 @app.get("/api/public/challenges")
 def public_challenges_api():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"currently bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     return jsonify({"ok": True, "challenges": challenges})
 
 
@@ -696,13 +734,54 @@ def publish_challenge(challenge_id):
             break
     if not found:
         return jsonify({"ok": False, "message": "Challenge not found."}), 404
-    found["status"] = "currently bidding"
+    found["status"] = "start bidding"
     found["updatedAt"] = _now_iso()
     if target_bucket == "drafts":
         store["drafts"].pop(found["id"], None)
     store["published"][found["id"]] = found
     _write_store(store)
     return jsonify({"ok": True, "challenge": found, "message": "Challenge published successfully."})
+
+
+@app.post("/api/challenges/<challenge_id>/bidding")
+def set_bidding_status(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    data = request.get_json(silent=True) or {}
+    status = str(data.get("status") or "").strip().lower()
+    if status not in {"start bidding", "closed"}:
+        return jsonify({"ok": False, "message": "Status must be start bidding or closed."}), 400
+    store = _read_store()
+    found = None
+    found_bucket = None
+    for bucket in ("drafts", "published"):
+        for value in store.get(bucket, {}).values():
+            if value.get("challengeId") == challenge_id or value.get("id") == challenge_id:
+                found = value
+                found_bucket = bucket
+                break
+        if found:
+            break
+    if not found:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if status == "start bidding":
+        try:
+            start_price = float(str(data.get("bidStartPrice") or ""))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "message": "Enter a valid government bid start price."}), 400
+        if start_price <= 0:
+            return jsonify({"ok": False, "message": "Bid start price must be greater than zero."}), 400
+        found["bidStartPrice"] = start_price
+        found["currentBidPrice"] = float(found.get("currentBidPrice") or start_price)
+    found["status"] = status
+    found["updatedAt"] = _now_iso()
+    if status == "start bidding" and found_bucket == "drafts":
+        store["drafts"].pop(found["id"], None)
+        store["published"][found["id"]] = found
+    _write_store(store)
+    _persist_contract(found)
+    return jsonify({"ok": True, "challenge": found, "message": f"Bidding {status}."})
 
 
 @app.post("/api/challenges/<challenge_id>/periodic-checks")
@@ -971,7 +1050,8 @@ def startup_portal():
     if not profile:
         session.clear()
         return redirect("/login")
-    return render_template("startup-portal.htm", profile=profile)
+    available_challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "start bidding"]
+    return render_template("startup-portal.htm", profile=profile, available_challenges=available_challenges)
 
 
 @app.get("/company-profile")
@@ -986,7 +1066,7 @@ def company_profile():
 
 @app.get("/contracts/<contract_id>")
 def contract_detail(contract_id):
-    contract = SAMPLE_CONTRACTS.get(contract_id.upper())
+    contract = _contract_view(contract_id)
     if not contract:
         return ("Contract not found", 404)
     return render_template("contract-detail.htm", contract=contract)
@@ -995,10 +1075,46 @@ def contract_detail(contract_id):
 @app.get("/contracts/<contract_id>/apply")
 @session_required("startup")
 def start_contract_application(contract_id):
-    contract = SAMPLE_CONTRACTS.get(contract_id.upper())
+    contract = _contract_view(contract_id)
     if not contract:
         return ("Contract not found", 404)
+    if contract.get("status") != "start bidding":
+        return render_template("application-start.htm", contract=contract, closed=True)
     return render_template("application-start.htm", contract=contract)
+
+
+@app.post("/api/contracts/<contract_id>/bids")
+@session_required("startup")
+def submit_contract_bid(contract_id):
+    contract = _contract_view(contract_id)
+    if not contract:
+        return jsonify({"ok": False, "message": "Contract not found."}), 404
+    if contract.get("status") != "start bidding":
+        return jsonify({"ok": False, "message": "Bidding is closed for this contract."}), 400
+    try:
+        amount = float(str((request.get_json(silent=True) or {}).get("amount") or ""))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Enter a valid bid amount."}), 400
+    current = float(contract.get("currentBidPrice") or contract.get("bidStartPrice") or 0)
+    if amount <= current:
+        return jsonify({"ok": False, "message": f"Your bid must be higher than the current bid of ₹{current:,.2f}."}), 400
+    challenge = contract.get("challenge")
+    if challenge:
+        bid = {"startupId": session.get("business_id"), "amount": amount, "submittedAt": _now_iso()}
+        challenge.setdefault("bids", []).append(bid)
+        challenge["currentBidPrice"] = amount
+        engagement = challenge.setdefault("startupEngagement", {"bidsReceived": 0, "startups": []})
+        engagement["bidsReceived"] = len(challenge["bids"])
+        store = _read_store()
+        for bucket in ("drafts", "published"):
+            for key, value in store.get(bucket, {}).items():
+                if value.get("challengeId") == contract_id or value.get("id") == contract_id:
+                    store[bucket][key] = challenge
+        _write_store(store)
+        _persist_contract(challenge)
+    else:
+        contract["currentBidPrice"] = amount
+    return jsonify({"ok": True, "currentBidPrice": amount, "message": "Bid submitted successfully."})
 
 
 @app.get("/ministry-portal")

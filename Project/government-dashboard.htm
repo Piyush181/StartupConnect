@@ -17,7 +17,7 @@
         </article>
         <article class="stat-card">
             <span class="stat-label">Published</span>
-            <strong>{{ challenges | selectattr('status', 'equalto', 'currently bidding') | list | length }}</strong>
+                    <strong>{{ challenges | selectattr('status', 'equalto', 'start bidding') | list | length }}</strong>
         </article>
         <article class="stat-card">
             <span class="stat-label">Active</span>
@@ -52,6 +52,13 @@
                     <a href="/create-challenge?preview={{ challenge.challengeId or challenge.id }}">Preview</a>
                     <button class="link-button" type="button" data-open-schedule="{{ challenge.challengeId or challenge.id }}">Schedule Check</button>
                 </div>
+                <form class="bidding-control" data-bidding-form="{{ challenge.challengeId or challenge.id }}">
+                    <strong>Bidding control</strong>
+                    <label>Government bid start price <input name="bidStartPrice" type="number" min="0.01" step="0.01" value="{{ challenge.bidStartPrice or '' }}" required></label>
+                    <label>Status <select name="status"><option value="start bidding" {% if challenge.status == 'start bidding' %}selected{% endif %}>Start bidding</option><option value="closed" {% if challenge.status == 'closed' %}selected{% endif %}>Close bidding</option></select></label>
+                    <button class="button outline small" type="submit">Save bidding status</button>
+                    <span class="form-message" data-bidding-status></span>
+                </form>
                 <form class="periodic-schedule" data-schedule-form="{{ challenge.challengeId or challenge.id }}" hidden>
                     <label>Report phase title <input name="title" value="Periodic progress report"></label>
                     <label>Frequency <select name="frequency"><option>Monthly</option><option>Quarterly</option><option>Milestone-based</option></select></label>
@@ -117,6 +124,21 @@
             const result = await response.json();
             status.textContent = result.message;
             if (response.ok) form.hidden = true;
+        };
+    });
+
+    document.querySelectorAll('[data-bidding-form]').forEach(form => {
+        form.onsubmit = async event => {
+            event.preventDefault();
+            const status = form.querySelector('[data-bidding-status]');
+            const response = await fetch(`/api/challenges/${form.dataset.biddingForm}/bidding`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.fromEntries(new FormData(form)))
+            });
+            const result = await response.json();
+            status.textContent = result.message;
+            if (response.ok) window.location.reload();
         };
     });
 

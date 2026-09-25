@@ -607,7 +607,7 @@
                     src="https://images.unsplash.com/photo-1774069129040-05a274355383?auto=format&fit=crop&w=1200&q=85"
                     alt="Modern city infrastructure at dusk">
                 <div class="pulse">
-                    <div class="pulse-label">Live network pulse</div><strong>{{ active_pilots }} active pilots</strong><small>Across
+                    <strong>{{ active_pilots }} active pilots</strong><small>Across
                         Maharashtra · updated today</small>
                 </div>
             </div>
@@ -646,18 +646,7 @@
                 <div class="challenge-list">{% for challenge in homepage_challenges %}<a class="challenge" href="/public-challenges/{{ challenge.challengeId }}"><div><div class="challenge-type">{{ challenge.status }} · {{ challenge.challengeId }}</div><h3>{{ challenge.title }}</h3></div><p>{{ challenge.government.department }}<br>{{ challenge.category or challenge.challengeType }}</p><div class="meta"><strong>{{ challenge.constraints.budget.estimatedBudget or 'Budget to be announced' }}</strong>Apply by {{ challenge.timeline.submissionDeadline or 'date to be announced' }}</div><span class="arrow">↗</span></a>{% else %}<p class="empty-state">No live challenges are available yet.</p>{% endfor %}</div>
             </div>
         </section>
-        <section id="join" class="cta">
-            <div class="container cta-inner">
-                <div>
-                    <div class="section-kicker">Built for both sides of the bridge</div>
-                    <h2>Have a public problem worth solving?</h2>
-                </div>
-                <div>
-                    <p>Departments frame the need. Startups bring the possibility.</p><a class="button"
-                        href="mailto:hello@startupconnect.in">Join Startup Connect</a>
-                </div>
-            </div>
-        </section>
+        
     </main>
     <footer id="resources">
         <div class="container">
