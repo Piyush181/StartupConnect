@@ -30,6 +30,24 @@
             <button class="mobile-menu" aria-label="Open menu">☰</button>
         </div>
     </header>
+    {% if session.get("role") == "ministry" %}
+    {% set path = request.path %}
+    {% set programme = pilot if pilot is defined and pilot else none %}
+    {% set programme_mode = ((programme.agreement or programme.agreementDraft or {}).mode) if programme else none %}
+    {% if path.startswith('/periodic-checks') %}{% set section = 'checks' %}
+    {% elif path in ['/sandbox', '/sandbox-pilots'] or programme_mode == 'Sandbox' %}{% set section = 'sandbox' %}
+    {% elif path == '/pilots' or path.startswith('/government-pilots') or path.endswith('/pilots') %}{% set section = 'pilots' %}
+    {% elif path.startswith('/ministry-portal') %}{% set section = 'workspace' %}
+    {% elif path.startswith('/government-') or path.startswith('/create-challenge') %}{% set section = 'challenges' %}
+    {% else %}{% set section = none %}{% endif %}
+    <nav class="ministry-nav" aria-label="Ministry workspace">
+        <div class="container">
+            {% for key, href, label in [('workspace', '/ministry-portal', 'Workspace'), ('challenges', '/government-dashboard', 'Challenges'), ('checks', '/periodic-checks', 'Periodic checks'), ('sandbox', '/sandbox', 'Sandbox'), ('pilots', '/pilots', 'Pilots')] %}
+            <a href="{{ href }}" {% if section == key %}aria-current="page"{% endif %}>{{ label }}</a>
+            {% endfor %}
+        </div>
+    </nav>
+    {% endif %}
 
     {% block content %}{% endblock %}
     <script>

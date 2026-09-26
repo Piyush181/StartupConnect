@@ -1,0 +1,87 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Sandbox &amp; pilots · {{ challenge.challengeId }}</div>
+            <h1>{{ challenge.title }}</h1>
+            <p class="dashboard-subtitle">Run a controlled sandbox or a limited live pilot with each startup selected for this challenge, and decide from verified evidence whether to scale.</p>
+        </div>
+        <div class="hero-actions">
+            <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/final-selection">Final selection</a>
+            <a class="button outline" href="/sandbox-pilots">All pilots</a>
+        </div>
+    </section>
+
+    {% if selected is none %}
+    <section class="challenge-panel">
+        <h2>Final selection not confirmed yet</h2>
+        <p>Pilots start from the startups confirmed in the final selection. Finish evaluation and confirm the selection first.</p>
+        <div class="hero-actions">
+            <a class="button" href="/government-dashboard/{{ challenge.challengeId }}/advanced-evaluation">Advanced evaluation</a>
+            <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/final-selection">Final selection</a>
+        </div>
+    </section>
+    {% else %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Selected startups</h2><span class="form-note">{{ selected | length }} selected in final selection</span></div>
+        <div class="challenge-list">
+            {% for item in selected %}
+            {% set pilot = pilots_by_application.get(item.application_id) %}
+            <article class="challenge-card">
+                <div class="challenge-card-top">
+                    <div><span class="challenge-id">{{ item.application_id }}</span><h3>{{ item.startup_name }}</h3></div>
+                    {% if pilot %}<span class="plt-stage plt-stage-{{ pilot.stage }}">{{ stage_labels[pilot.stage] }}</span>{% else %}<span class="plt-stage">No pilot yet</span>{% endif %}
+                </div>
+                <div class="card-actions">
+                    {% if pilot %}
+                    <a class="button small" href="/government-pilots/{{ pilot.pilotId }}">Open pilot workspace</a>
+                    {% else %}
+                    <button class="button small" type="button" data-create-pilot="{{ item.application_id }}">Set up sandbox / pilot</button>
+                    {% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        <p class="form-message" data-status role="status"></p>
+    </section>
+
+    {% if cohort | selectattr('attainment', 'defined') | list %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Cohort comparison</h2><span class="form-note">Live and completed pilots side by side, ordered by KPI targets achieved</span></div>
+        <div class="comparison-table-wrap"><table class="comparison-table adv-table">
+            <thead><tr><th>Startup</th><th>Stage</th><th>Health</th><th>KPI targets achieved</th><th>Projected at end</th><th>Milestones verified</th><th>Paid</th><th>Open incidents</th></tr></thead>
+            <tbody>
+            {% for row in cohort if row.attainment is defined %}
+            <tr>
+                <td data-label="Startup"><a href="/government-pilots/{{ row.pilotId }}">{{ row.startupName }}</a></td>
+                <td data-label="Stage">{{ row.stageLabel }}</td>
+                <td data-label="Health"><span class="plt-rag plt-rag-{{ row.rag | lower }}">{{ row.rag }}</span><small>{{ row.health }}</small></td>
+                <td data-label="KPI targets achieved"><strong>{{ '%.0f%%' | format(row.attainment) }}</strong><span class="plt-bar"><i style="width: {{ [row.attainment, 100] | min }}%"></i></span></td>
+                <td data-label="Projected at end">{{ '%.0f%%' | format(row.projected) if row.projected is not none else '—' }}</td>
+                <td data-label="Milestones verified">{{ '%.0f%%' | format(row.milestones_verified_pct) }}</td>
+                <td data-label="Paid">₹{{ '{:,.0f}'.format(row.released) }}<small>of ₹{{ '{:,.0f}'.format(row.budget) }}</small></td>
+                <td data-label="Open incidents">{{ row.incidents_open }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table></div>
+    </section>
+    {% endif %}
+    {% endif %}
+</main>
+<script>
+    document.querySelectorAll('[data-create-pilot]').forEach(button => button.addEventListener('click', async () => {
+        const status = document.querySelector('[data-status]');
+        button.disabled = true;
+        const response = await fetch(`/api/government/challenges/{{ challenge.challengeId }}/pilots`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ applicationId: button.dataset.createPilot })
+        });
+        const result = await response.json();
+        status.textContent = result.message;
+        if (response.ok) window.location.assign(`/government-pilots/${result.pilotId}`);
+        else button.disabled = false;
+    }));
+</script>
+{% endblock %}

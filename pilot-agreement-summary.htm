@@ -1,0 +1,27 @@
+<div class="plt-agreement-view">
+    <dl class="adv-metrics">
+        <div><dt>Mode</dt><dd>{{ agreement.mode }}</dd></div>
+        <div><dt>Period</dt><dd>{{ agreement.startDate }} to {{ agreement.endDate }}</dd></div>
+        <div><dt>Reporting</dt><dd>{{ agreement.reportingCadence }}</dd></div>
+        <div><dt>Budget</dt><dd>₹{{ '{:,.0f}'.format(agreement.budget) }}{% if agreement.cohortSize %} · cohort {{ agreement.cohortSize }}{% endif %}</dd></div>
+    </dl>
+    <h3>Scope</h3><p>{{ agreement.scope }}</p>
+    <h3>Sites or environment</h3><p>{{ agreement.sites }}</p>
+    <h3>Success KPIs</h3>
+    <div class="comparison-table-wrap"><table class="comparison-table adv-table">
+        <thead><tr><th>KPI</th><th>Baseline</th><th>Target</th><th>Guardrail</th><th>Weight</th><th>Measurement</th></tr></thead>
+        <tbody>{% for kpi in agreement.kpis %}<tr><td data-label="KPI">{{ kpi.name }}{% if kpi.critical %} <span class="adv-risk adv-risk-high">Critical</span>{% endif %}<small>{{ 'Higher' if kpi.direction == 'increase' else 'Lower' }} is better</small></td><td data-label="Baseline">{{ '%g' | format(kpi.baseline) }} {{ kpi.unit }}</td><td data-label="Target">{{ '%g' | format(kpi.target) }} {{ kpi.unit }}</td><td data-label="Guardrail">{{ ('%g' | format(kpi.guardrail)) ~ ' ' ~ kpi.unit if kpi.guardrail is not none else '—' }}</td><td data-label="Weight">{{ '%g' | format(kpi.weight) }}</td><td data-label="Measurement">{{ kpi.method or '—' }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <h3>Milestones</h3>
+    <div class="comparison-table-wrap"><table class="comparison-table adv-table">
+        <thead><tr><th>Milestone</th><th>Due</th><th>Deliverables</th><th>Payment</th></tr></thead>
+        <tbody>{% for item in agreement.milestones %}<tr><td data-label="Milestone">{{ item.title }}</td><td data-label="Due">{{ item.dueDate }}</td><td data-label="Deliverables">{{ item.deliverables }}</td><td data-label="Payment">{{ '%g' | format(item.paymentPct) }}%{% if agreement.budget %}<small>₹{{ '{:,.0f}'.format(agreement.budget * item.paymentPct / 100) }}</small>{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <div class="public-detail-grid">
+        <section><h3>Data handling and privacy</h3><p>{{ agreement.dataResponsibilities }}</p></section>
+        <section><h3>IP ownership</h3><p>{{ agreement.ipOwnership }}</p></section>
+        <section><h3>Cybersecurity</h3><p>{{ agreement.securityRequirements }}</p></section>
+        <section><h3>Exit criteria</h3><p>{{ agreement.exitCriteria }}</p></section>
+        {% if agreement.riskResponsibilities %}<section><h3>Risks and responsibilities</h3><p>{{ agreement.riskResponsibilities }}</p></section>{% endif %}
+    </div>
+</div>

@@ -10,7 +10,9 @@
         </div>
         <div class="hero-actions">
             <a class="button outline" href="/government-dashboard">Back to challenges</a>
-            <a class="button" href="/government-dashboard/{{ challenge.challengeId }}/comparison">Evaluation comparison</a>
+            <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/comparison">Evaluation comparison</a>
+            <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/advanced-evaluation">Advanced evaluation</a>
+            <a class="button" href="/government-dashboard/{{ challenge.challengeId }}/pilots">Sandbox &amp; pilots</a>
         </div>
     </section>
 
@@ -44,6 +46,7 @@
                 </div>
                 <div class="card-actions">
                     <a class="button small" href="/government-applications/{{ application.application_id }}">Open application &amp; screen eligibility</a>
+                    {% if application.eligibility_status == 'Eligible' %}<a class="button outline small" href="/government-applications/{{ application.application_id }}/advanced-evaluation">Panel &amp; risk evaluation</a>{% endif %}
                 </div>
             </article>
             {% endfor %}

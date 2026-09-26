@@ -1,0 +1,259 @@
+{% extends "base.htm" %}
+
+{% block content %}
+{% set pre = view.pre_assessment %}
+{% set panel = view.panel %}
+{% set editable = can_score and not locked %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Advanced evaluation · {{ application.application_id }}</div>
+            <h1>{{ application.startup_name or application.business_id }}</h1>
+            <p class="dashboard-subtitle">{{ challenge.title }}</p>
+        </div>
+        <div class="hero-actions">
+            <a class="button outline" href="/government-applications/{{ application.application_id }}">Application &amp; scorecard</a>
+            <a class="button" href="/government-dashboard/{{ challenge.challengeId }}/advanced-evaluation">Challenge ranking</a>
+        </div>
+    </section>
+
+    {% if locked %}<p class="adv-notice">Final selection is confirmed for this challenge. Advanced evaluation is read-only.</p>
+    {% elif not can_score %}<p class="adv-notice">Panel scoring, risk and financial inputs open once this application is marked eligible. Current status: {{ application.status | replace('_', ' ') }}.</p>{% endif %}
+
+    <section class="adv-summary" aria-label="Evaluation summary">
+        <div><span>Panel technical score</span><strong>{{ '%.1f' | format(panel.technical_score) if panel.technical_score is not none else '—' }}</strong><small>Threshold {{ '%g' | format(view.config.technicalThreshold) }} · {{ panel.method | replace('_', ' ') }}</small></div>
+        <div><span>Panel confidence</span><strong>{{ panel.confidence }}</strong><small>{{ panel.panel_size }} scoring · {{ panel.recused | length }} recused · minimum {{ view.config.minimumPanelSize }}</small></div>
+        <div><span>Delivery risk</span><strong class="adv-risk-text-{{ view.risk.level | lower | replace(' ', '-') }}">{{ view.risk.level }}</strong><small>{% if view.risk.assessed %}Index {{ view.risk.index }} · −{{ '%.1f' | format(view.risk.penalty_pct) }}% to score{% else %}Not assessed yet{% endif %}</small></div>
+        <div><span>Financial proposal</span><strong>{{ '₹{:,.0f}'.format(view.quote) if view.quote else '—' }}</strong><small>{{ view.quote_source or 'None recorded' }}</small></div>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Automated pre-assessment</h2><span class="form-note">Advisory only · never added to the panel score</span></div>
+        <div class="adv-pre">
+            <div class="adv-pre-band adv-band-{{ pre.band | lower }}"><strong>{{ pre.band }}</strong><span>{{ '%.0f' | format(pre.indicator) }} / 100</span></div>
+            <dl class="adv-metrics">
+                <div><dt>Answer completeness</dt><dd>{{ '%.0f' | format(pre.completeness) }}%</dd></div>
+                <div><dt>Mandatory requirement coverage</dt><dd>{{ '%.0f%%' | format(pre.requirement_coverage) if pre.requirement_coverage is not none else 'No requirements listed' }}</dd></div>
+                <div><dt>Solution readiness</dt><dd>{{ pre.readiness.label }}</dd></div>
+                <div><dt>Evidence strength</dt><dd>{{ pre.evidence.score }}%</dd></div>
+            </dl>
+        </div>
+        {% if pre.flags %}
+        <ul class="adv-flags">{% for flag in pre.flags %}<li class="adv-flag-{{ flag.severity }}">{{ flag.message }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if pre.coverage_items %}
+        <details class="adv-history"><summary>Requirement-by-requirement coverage</summary>
+            <ul class="adv-coverage">{% for item in pre.coverage_items %}<li><span class="adv-cov adv-cov-{{ item.status }}">{{ item.status | title }}</span>{{ item.requirement }}{% if item.matched_terms %}<small>Matched: {{ item.matched_terms | join(', ') }}</small>{% endif %}</li>{% endfor %}</ul>
+            <p class="form-note">Coverage is keyword matching against the startup's answers. Treat "missing" as a prompt to check, not a finding.</p>
+        </details>
+        {% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Panel scoring</h2><span class="form-note">Each panelist scores independently; divergent criteria need a recorded consensus</span></div>
+        <div class="comparison-table-wrap">
+            <table class="comparison-table adv-table">
+                <thead><tr><th>Criterion</th><th>Weight</th><th>Panel scores</th><th>Mean</th><th>Spread</th><th>Final</th><th>Consensus</th></tr></thead>
+                <tbody>
+                    {% for row in panel.criteria %}
+                    <tr class="{{ 'adv-divergent' if row.divergent and not row.moderated }}">
+                        <td data-label="Criterion">{{ row.criterion }}<small>out of {{ '%g' | format(row.maximum_score) }}</small></td>
+                        <td data-label="Weight">{{ '%g' | format(row.weight) }}</td>
+                        <td data-label="Panel scores">{{ row.scores | map('string') | join(', ') if row.scores else '—' }}</td>
+                        <td data-label="Mean">{{ row.mean if row.mean is defined else '—' }}</td>
+                        <td data-label="Spread">{% if row.spread_pct is defined %}{{ row.spread_pct }}%{% else %}—{% endif %}</td>
+                        <td data-label="Final"><strong>{{ row.final if row.final is not none else '—' }}</strong></td>
+                        <td data-label="Consensus">
+                            {% if row.moderated %}<span class="adv-risk adv-risk-low">Moderated</span><small>{{ row.moderated.note }}</small>
+                            {% elif row.divergent %}
+                                {% if editable %}
+                                <form class="adv-moderate" data-moderation-form>
+                                    <input type="hidden" name="criterion" value="{{ row.criterion }}">
+                                    <label>Agreed score<input type="number" name="score" min="{{ row.min }}" max="{{ row.max }}" step="0.01" required></label>
+                                    <label>Discussion outcome<textarea name="note" rows="2" maxlength="4000" required></textarea></label>
+                                    <button class="button small" type="submit">Record consensus</button>
+                                </form>
+                                {% else %}<span class="adv-risk adv-risk-high">Divergent</span>{% endif %}
+                            {% elif row.panel_size %}Within tolerance{% else %}—{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <span class="form-message" data-moderation-status role="status"></span>
+
+        {% if panel.calibration %}
+        <div class="adv-calibration">
+            <h3>Reviewer calibration</h3>
+            <p class="form-note">Average distance of each panelist from the panel mean. Persistent leniency or strictness is worth discussing before final ranking.</p>
+            <ul>{% for item in panel.calibration %}<li><strong>{{ item.panelistName }}</strong> {{ item.tendency }} ({{ '%+.1f' | format(item.bias_pct) }}%)</li>{% endfor %}</ul>
+        </div>
+        {% endif %}
+
+        {% if view.scorecards %}
+        <details class="adv-history"><summary>Submitted scorecards ({{ view.scorecards | length }})</summary>
+            {% for card in view.scorecards %}
+            <article class="adv-card">
+                <h3>{{ card.panelistName }}{% if card.panelistRole %} <small>{{ card.panelistRole }}</small>{% endif %}</h3>
+                {% if card.recused %}<p><span class="adv-risk adv-risk-high">Recused</span> {{ card.conflictNote }}</p>
+                {% else %}
+                <p class="form-note">Version {{ card.version }} · {{ card.submittedAt }} · recorded by {{ card.recordedBy }}</p>
+                <ul>{% for name, score in card.scores.items() %}<li>{{ name }}: <strong>{{ score if score is not none else 'Not scored' }}</strong>{% if card.comments.get(name) %} · {{ card.comments[name] }}{% endif %}</li>{% endfor %}</ul>
+                {% if card.overallComment %}<p>{{ card.overallComment }}</p>{% endif %}
+                {% endif %}
+            </article>
+            {% endfor %}
+        </details>
+        {% endif %}
+
+        {% if editable %}
+        <form class="adv-scorecard" data-scorecard-form>
+            <h3>Record a panelist's scorecard</h3>
+            <p class="form-note">Re-submitting under the same name replaces that panelist's earlier scorecard; every version stays in the history.</p>
+            <div class="adv-config">
+                <label>Panelist name<input name="panelistName" maxlength="120" required></label>
+                <label>Role on panel<input name="panelistRole" maxlength="120" placeholder="Domain expert, finance officer…"></label>
+            </div>
+            <fieldset class="adv-coi">
+                <legend>Conflict of interest</legend>
+                <label><input type="radio" name="conflictOfInterest" value="none" required> No relationship with this startup, its founders or competitors</label>
+                <label><input type="radio" name="conflictOfInterest" value="declared"> Conflict declared — panelist recuses from this application</label>
+                <label class="adv-coi-note">Conflict details<textarea name="conflictNote" rows="2" maxlength="2000"></textarea></label>
+            </fieldset>
+            <div class="adv-criteria">
+                {% for item in view.criteria %}
+                <div class="screening-requirement" data-criterion-row data-criterion="{{ item.criterion }}">
+                    <p><strong>{{ item.criterion }}</strong>{% if item.description %} — {{ item.description }}{% endif %}<small>Weight {{ '%g' | format(item.weight) }} · max {{ '%g' | format(item.maximum_score) }}{{ ' · required' if item.required }}</small></p>
+                    <label>Score<input type="number" min="0" max="{{ item.maximum_score }}" step="0.01" data-score {{ 'required' if item.required }}></label>
+                    <label>Justification<textarea rows="2" maxlength="2000" data-comment></textarea></label>
+                </div>
+                {% endfor %}
+            </div>
+            <label>Overall comment<textarea name="overallComment" rows="3" maxlength="4000"></textarea></label>
+            <div class="adv-actions"><button class="button" type="submit">Save scorecard</button><span class="form-message" data-scorecard-status role="status"></span></div>
+        </form>
+        {% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Delivery risk</h2><span class="form-note">{% if view.risk_is_suggested %}Starting values suggested from the pre-assessment — confirm or change before saving{% else %}Likelihood × impact, 1 (low) to 5 (high){% endif %}</span></div>
+        <form data-risk-form>
+            <div class="comparison-table-wrap">
+                <table class="comparison-table adv-table">
+                    <thead><tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Rating</th><th>Mitigation (required for high and critical)</th></tr></thead>
+                    <tbody>
+                        {% for key, label in view.risk_dimensions %}
+                        {% set entry = view.risk_inputs.get(key, {}) %}
+                        <tr data-risk-row data-risk-key="{{ key }}">
+                            <td data-label="Risk">{{ label }}</td>
+                            <td data-label="Likelihood"><select data-likelihood {{ 'disabled' if not editable }}>{% for value in range(1, 6) %}<option {{ 'selected' if entry.likelihood == value }}>{{ value }}</option>{% endfor %}</select></td>
+                            <td data-label="Impact"><select data-impact {{ 'disabled' if not editable }}>{% for value in range(1, 6) %}<option {{ 'selected' if entry.impact == value }}>{{ value }}</option>{% endfor %}</select></td>
+                            <td data-label="Rating"><span class="adv-risk" data-rating></span></td>
+                            <td data-label="Mitigation"><textarea rows="1" maxlength="2000" data-mitigation {{ 'disabled' if not editable }}>{{ entry.mitigation or '' }}</textarea></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if editable %}<div class="adv-actions"><button class="button" type="submit">Save risk assessment</button><span class="form-message" data-risk-status role="status"></span></div>{% endif %}
+        </form>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Financial proposal</h2><span class="form-note">Used for the financial score: lowest qualified proposal scores 100</span></div>
+        <p>{% if view.quote %}Current amount: <strong>₹{{ '{:,.2f}'.format(view.quote) }}</strong> ({{ view.quote_source }}).{% else %}No financial proposal on record.{% endif %}</p>
+        {% if editable %}
+        <form class="adv-config" data-financial-form>
+            <label>Amount (₹)<input type="number" name="amount" min="1" step="0.01" required></label>
+            <label>Source<input name="source" maxlength="500" placeholder="Sealed financial bid opened on …" required></label>
+            <div class="adv-wide adv-actions"><button class="button outline" type="submit">Record financial proposal</button><span class="form-message" data-financial-status role="status"></span></div>
+        </form>
+        {% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Audit trail</h2></div>
+        {% if view.history %}
+        <div class="dashboard-progress-list">{% for event in view.history %}<span>{{ event.at }} · {{ event.event_type | replace('_', ' ') | capitalize }} · {{ event.actor }}{% if event.details.panelist %} · {{ event.details.panelist }} v{{ event.details.version }}{% endif %}{% if event.details.criterion %} · {{ event.details.criterion }} → {{ event.details.score }}{% endif %}{% if event.details.level %} · {{ event.details.level }}{% endif %}{% if event.details.amount %} · ₹{{ '{:,.2f}'.format(event.details.amount) }}{% endif %}</span>{% endfor %}</div>
+        {% else %}<p class="form-note">No advanced evaluation activity yet.</p>{% endif %}
+    </section>
+</main>
+<script>
+    const applicationId = {{ application.application_id | tojson }};
+    const base = `/api/government/applications/${applicationId}/advanced-evaluation`;
+    async function post(path, body, statusElement) {
+        statusElement.textContent = 'Saving...';
+        const response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const result = await response.json();
+        statusElement.textContent = result.message;
+        if (response.ok) window.location.reload();
+    }
+
+    const scorecard = document.querySelector('[data-scorecard-form]');
+    if (scorecard) {
+        const toggleConflict = () => {
+            const recused = scorecard.elements.conflictOfInterest.value === 'declared';
+            scorecard.querySelectorAll('[data-criterion-row]').forEach(row => {
+                row.hidden = recused;
+                row.querySelector('[data-score]').disabled = recused;
+            });
+            scorecard.elements.conflictNote.required = recused;
+        };
+        scorecard.querySelectorAll('input[name="conflictOfInterest"]').forEach(input => input.addEventListener('change', toggleConflict));
+        scorecard.addEventListener('submit', event => {
+            event.preventDefault();
+            const scores = {}, comments = {};
+            scorecard.querySelectorAll('[data-criterion-row]').forEach(row => {
+                scores[row.dataset.criterion] = row.querySelector('[data-score]').value;
+                comments[row.dataset.criterion] = row.querySelector('[data-comment]').value;
+            });
+            post('/panel', {
+                panelistName: scorecard.elements.panelistName.value,
+                panelistRole: scorecard.elements.panelistRole.value,
+                conflictOfInterest: scorecard.elements.conflictOfInterest.value,
+                conflictNote: scorecard.elements.conflictNote.value,
+                overallComment: scorecard.elements.overallComment.value,
+                scores, comments
+            }, scorecard.querySelector('[data-scorecard-status]'));
+        });
+    }
+
+    document.querySelectorAll('[data-moderation-form]').forEach(form => form.addEventListener('submit', event => {
+        event.preventDefault();
+        post('/moderation', { criterion: form.elements.criterion.value, score: form.elements.score.value, note: form.elements.note.value }, document.querySelector('[data-moderation-status]'));
+    }));
+
+    const riskForm = document.querySelector('[data-risk-form]');
+    const levelFor = rating => rating > 15 ? 'Critical' : rating > 9 ? 'High' : rating > 4 ? 'Medium' : 'Low';
+    const paintRisk = row => {
+        const rating = Number(row.querySelector('[data-likelihood]').value) * Number(row.querySelector('[data-impact]').value);
+        const badge = row.querySelector('[data-rating]');
+        const level = levelFor(rating);
+        badge.textContent = `${rating} · ${level}`;
+        badge.className = `adv-risk adv-risk-${level.toLowerCase()}`;
+    };
+    riskForm?.querySelectorAll('[data-risk-row]').forEach(row => {
+        paintRisk(row);
+        row.querySelectorAll('select').forEach(select => select.addEventListener('change', () => paintRisk(row)));
+    });
+    riskForm?.addEventListener('submit', event => {
+        event.preventDefault();
+        const risks = {};
+        riskForm.querySelectorAll('[data-risk-row]').forEach(row => {
+            risks[row.dataset.riskKey] = {
+                likelihood: Number(row.querySelector('[data-likelihood]').value),
+                impact: Number(row.querySelector('[data-impact]').value),
+                mitigation: row.querySelector('[data-mitigation]').value
+            };
+        });
+        post('/risk', { risks }, riskForm.querySelector('[data-risk-status]'));
+    });
+
+    const financial = document.querySelector('[data-financial-form]');
+    financial?.addEventListener('submit', event => {
+        event.preventDefault();
+        post('/financial', { amount: financial.elements.amount.value, source: financial.elements.source.value }, financial.querySelector('[data-financial-status]'));
+    });
+</script>
+{% endblock %}

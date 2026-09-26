@@ -28,6 +28,18 @@
             <button class="button" type="submit">Continue to ministry portal</button>
         </form>
         <div class="form-message" role="status"></div>
+        {% if demo_accounts %}
+        <details class="demo-accounts" open>
+            <summary>Demo accounts for testing</summary>
+            <p class="form-note">Fictional organisations. Choose one to fill the form, then sign in.</p>
+            <ul>
+                {% for account in demo_accounts %}
+                <li><button class="text-button" type="button" data-demo-startup='{{ {"business_id": account.business_id, "gstin": account.gstin, "password": account.password} | tojson }}'>{{ account.business_name }}</button><small>{{ account.sector }} · {{ account.current_stage }}</small></li>
+                {% endfor %}
+                <li><button class="text-button" type="button" data-demo-ministry>Ministry officer (admin)</button><small>Owns the demo challenge GOV-DEMO-001</small></li>
+            </ul>
+        </details>
+        {% endif %}
     </div>
 </main>
 <footer class="footer">
@@ -56,4 +68,23 @@
     document.querySelectorAll('.login-tab').forEach(tab => tab.onclick = () => { document.querySelectorAll('.login-tab').forEach(item => item.classList.remove('active')); tab.classList.add('active'); document.querySelector('#startup-login-form').hidden = tab.dataset.role !== 'startup'; document.querySelector('#ministry-login-form').hidden = tab.dataset.role !== 'ministry'; message.textContent = ''; });
     document.querySelectorAll('.role-login-form').forEach(form => form.onsubmit = async event => { event.preventDefault(); const payload = Object.fromEntries(new FormData(form)); payload.role = form.id.startsWith('ministry') ? 'ministry' : 'startup'; const response = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); const result = await response.json(); message.textContent = result.message; if (result.ok) window.location.href = result.redirect; });
 </script>
+{% if demo_accounts %}
+<script>
+    const chooseTab = role => document.querySelector(`.login-tab[data-role="${role}"]`).click();
+    document.querySelectorAll('[data-demo-startup]').forEach(button => button.addEventListener('click', () => {
+        const account = JSON.parse(button.dataset.demoStartup);
+        chooseTab('startup');
+        const form = document.querySelector('#startup-login-form');
+        Object.entries(account).forEach(([name, value]) => { form.elements[name].value = value; });
+        form.querySelector('button[type="submit"]').focus();
+    }));
+    document.querySelector('[data-demo-ministry]')?.addEventListener('click', () => {
+        chooseTab('ministry');
+        const form = document.querySelector('#ministry-login-form');
+        form.elements.ministry_id.value = 'admin';
+        form.elements.auth_code.value = '1234';
+        form.querySelector('button[type="submit"]').focus();
+    });
+</script>
+{% endif %}
 {% endblock %}

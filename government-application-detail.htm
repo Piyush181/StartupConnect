@@ -13,6 +13,7 @@
             <span class="status-badge {{ application.status | replace('_', '-') }}">{{ application.status | replace('_', ' ') | title }}</span>
             <span>Eligibility: {{ application.eligibility_status }}</span>
             <span>Evaluation: {{ application.evaluation_status }}</span>
+            {% if application.eligibility_status == 'Eligible' %}<a class="button small" href="/government-applications/{{ application.application_id }}/advanced-evaluation">Panel &amp; risk evaluation</a>{% endif %}
         </div>
     </section>
 

@@ -1,0 +1,196 @@
+{% extends "base.htm" %}
+
+{% block content %}
+{% set agreement = pilot.agreement %}
+{% set health = view.health %}
+<main class="container dashboard-shell">
+    <a class="back-link" href="/startup-portal">← Back to portal</a>
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">{{ agreement.mode if agreement else 'Pilot' }} · {{ pilot.pilotId }}</div>
+            <h1>{{ pilot.challengeTitle }}</h1>
+            <p class="dashboard-subtitle">Your {{ (agreement.mode if agreement else 'pilot') | lower }} with the government, from agreement to final decision.</p>
+        </div>
+        <span class="plt-stage plt-stage-{{ pilot.stage }}">{{ view.stage_label }}</span>
+    </section>
+    <p class="form-message plt-status" data-status role="status"></p>
+
+    {% if pilot.stage == 'awaiting_acceptance' %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Review the pilot agreement</h2><span class="form-note">Version {{ pilot.agreementVersion }}</span></div>
+        {% include "pilot-agreement-summary.htm" %}
+        <div class="plt-respond">
+            <form class="adv-config" data-accept-form>
+                <h3 class="adv-wide">Accept</h3>
+                <label>Authorised signatory<input name="signatoryName" maxlength="120" required></label>
+                <label>Designation<input name="designation" maxlength="120" required></label>
+                <label class="adv-wide plt-check-box"><input type="checkbox" name="confirm" required> I accept this agreement on behalf of the startup, including the KPIs, milestones, payment terms, data, IP and security responsibilities.</label>
+                <div class="adv-wide adv-actions"><button class="button" type="submit">Accept agreement</button></div>
+            </form>
+            <form class="adv-config" data-changes-form>
+                <h3 class="adv-wide">Or request changes</h3>
+                <label class="adv-wide">What should change and why<textarea name="comments" rows="4" maxlength="4000" required></textarea></label>
+                <div class="adv-wide adv-actions"><button class="button outline" type="submit">Request changes</button></div>
+            </form>
+        </div>
+    </section>
+    {% elif pilot.stage == 'draft' %}
+    <section class="challenge-panel"><h2>Agreement being revised</h2><p>The ministry is revising the agreement after your change request. You'll be able to review the new version here.</p>{% if pilot.changeRequests %}<p class="form-note">Your request: {{ pilot.changeRequests[-1].comments }}</p>{% endif %}</section>
+    {% elif pilot.stage == 'readiness' %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Preparing to go live</h2><span class="form-note">Accepted {{ pilot.acceptance.acceptedAt[:10] }} by {{ pilot.acceptance.signatoryName }}</span></div>
+        <p>The ministry is completing these checks. Reporting opens once the {{ agreement.mode | lower }} goes live.</p>
+        <ul class="plt-readonly-checks">{% for item in view.readiness_items %}<li class="{{ 'done' if item.done }}">{{ '✓' if item.done else '○' }} {{ item.label }}</li>{% endfor %}</ul>
+    </section>
+    {% endif %}
+
+    {% if health %}
+    {% if pilot.stage == 'suspended' %}<p class="plt-alert">This {{ agreement.mode | lower }} is suspended by the ministry. You can still report fixes and incidents; KPI readings will be reviewed once it resumes.</p>{% endif %}
+    <section class="plt-summary" aria-label="Pilot status">
+        <div class="plt-health plt-rag-{{ health.rag | lower }}"><span>Health</span><strong>{{ health.rag }}</strong><small>{{ health.score }} / 100</small></div>
+        <div><span>KPI targets achieved</span><strong>{{ '%.0f%%' | format(health.current_attainment) if health.current_attainment is not none else '—' }}</strong><small>Verified readings only</small></div>
+        <div><span>Time elapsed</span><strong>{{ '%.0f%%' | format(health.time_elapsed_pct) }}</strong><small>Ends {{ agreement.endDate }}</small></div>
+        <div><span>Payments received</span><strong>₹{{ '{:,.0f}'.format(view.scorecard.released) }}</strong><small>of ₹{{ '{:,.0f}'.format(agreement.budget) }}</small></div>
+        <div><span>Next report due</span><strong class="plt-small-strong">{{ health.next_report_due or '—' }}</strong><small>{{ agreement.reportingCadence }}</small></div>
+    </section>
+    {% if health.reasons %}<ul class="adv-flags">{% for reason in health.reasons %}<li class="adv-flag-warning">{{ reason }}</li>{% endfor %}</ul>{% endif %}
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>KPIs</h2><span class="form-note">Dashed line is the target</span></div>
+        <div class="plt-kpis">
+            {% for kpi in health.kpis %}
+            <article class="plt-kpi {{ 'breached' if kpi.breached }}">
+                <header><h3>{{ kpi.name }}</h3><span class="form-note">{{ '%g' | format(kpi.baseline) }} → {{ '%g' | format(kpi.target) }} {{ kpi.unit }}</span></header>
+                <svg class="plt-spark" viewBox="0 0 320 90" role="img" aria-label="Trend for {{ kpi.name }}" data-spark='{{ kpi | tojson }}' data-start="{{ agreement.startDate }}" data-end="{{ agreement.endDate }}" data-today="{{ today }}"></svg>
+                <p>{% if kpi.latest is not none %}Latest verified <strong>{{ '%g' | format(kpi.latest) }}</strong> · {{ '%.0f%%' | format(kpi.attainment * 100) }} of target · {{ kpi.trend }}{% else %}No verified readings yet{% endif %}{% if kpi.pending %} · {{ kpi.pending }} awaiting verification{% endif %}</p>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    {% if pilot.stage in ['active', 'suspended'] %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Submit a progress report</h2><span class="form-note">Readings and claims are verified by the ministry before they count</span></div>
+        <form class="plt-report" data-report-form>
+            <label>What happened this period<textarea name="summary" rows="3" maxlength="4000" required></textarea></label>
+            <fieldset>
+                <legend>KPI readings <small>leave blank if not measured this period</small></legend>
+                {% for kpi in agreement.kpis %}
+                <div class="plt-row" data-reading data-kpi="{{ kpi.kpiId }}">
+                    <label class="plt-grow">{{ kpi.name }} ({{ kpi.unit or 'value' }})<input type="number" step="any" data-value></label>
+                    <label>Measured on<input type="date" data-date value="{{ today }}" min="{{ agreement.startDate }}" max="{{ today }}"></label>
+                    <label class="plt-full">Evidence<input maxlength="2000" data-evidence placeholder="{{ kpi.method or 'Data source, dashboard link or report reference' }}"></label>
+                </div>
+                {% endfor %}
+            </fieldset>
+            {% set claimable = view.milestones | rejectattr('status', 'in', ['claimed', 'verified']) | list %}
+            {% if claimable %}
+            <fieldset>
+                <legend>Milestones completed</legend>
+                {% for item in claimable %}
+                <div class="plt-row" data-claim data-milestone="{{ item.milestoneId }}">
+                    <label class="plt-check-box plt-grow"><input type="checkbox" data-claimed> {{ item.title }} <small>due {{ item.dueDate }}{% if item.status == 'rejected' %} · previously rejected: {{ item.note }}{% endif %}</small></label>
+                    <label class="plt-full">Completion evidence<input maxlength="4000" data-evidence placeholder="{{ item.deliverables }}"></label>
+                </div>
+                {% endfor %}
+            </fieldset>
+            {% endif %}
+            <label>Blockers or help needed from the department<textarea name="blockers" rows="2" maxlength="4000"></textarea></label>
+            <fieldset>
+                <legend>Incidents <small>outages, data issues, user complaints, security events</small></legend>
+                <div data-incident-rows class="plt-rows"></div>
+                <button class="button outline small" type="button" data-add-incident>Report an incident</button>
+            </fieldset>
+            <div class="adv-actions"><button class="button" type="submit">Submit report</button></div>
+        </form>
+    </section>
+    {% endif %}
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Milestones</h2></div>
+        <div class="comparison-table-wrap"><table class="comparison-table adv-table">
+            <thead><tr><th>Milestone</th><th>Due</th><th>Status</th><th>Payment</th></tr></thead>
+            <tbody>{% for item in view.milestones %}{% set paid = pilot.payments | selectattr('milestoneId', 'equalto', item.milestoneId) | first %}<tr>
+                <td data-label="Milestone">{{ item.title }}</td>
+                <td data-label="Due">{{ item.dueDate }}{% if item.overdue %}<small class="plt-late">Overdue</small>{% endif %}</td>
+                <td data-label="Status"><span class="plt-ms plt-ms-{{ item.status }}">{{ item.status | title }}</span>{% if item.note %}<small>{{ item.note }}</small>{% endif %}</td>
+                <td data-label="Payment">{% if paid %}Received ₹{{ '{:,.0f}'.format(paid.amount) }}<small>{{ paid.releasedAt[:10] }} · ref {{ paid.reference }}</small>{% elif item.amount %}₹{{ '{:,.0f}'.format(item.amount) }} on verification{% else %}—{% endif %}</td>
+            </tr>{% endfor %}</tbody>
+        </table></div>
+    </section>
+
+    {% set reviewed = pilot.measurements | rejectattr('status', 'equalto', 'pending') | list %}
+    {% if pilot.measurements %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Your readings</h2></div>
+        <div class="comparison-table-wrap"><table class="comparison-table adv-table">
+            <thead><tr><th>KPI</th><th>Value</th><th>Date</th><th>Status</th></tr></thead>
+            <tbody>{% for item in pilot.measurements | reverse %}<tr><td data-label="KPI">{{ view.kpis_by_id[item.kpiId].name }}</td><td data-label="Value">{{ '%g' | format(item.value) }}</td><td data-label="Date">{{ item.date }}</td><td data-label="Status"><span class="plt-ms plt-ms-{{ item.status }}">{{ item.status | title }}</span>{% if item.note %}<small>{{ item.note }}</small>{% endif %}</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </section>
+    {% endif %}
+    {% endif %}
+
+    {% if pilot.decisions %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Government decision</h2></div>
+        {% set last = pilot.decisions[-1] %}
+        <p class="plt-recommendation"><strong>{{ last.label }}</strong>{% if last.newEndDate %} — extended to {{ last.newEndDate }}{% endif %}</p>
+        <p>{{ last.rationale }}</p>
+    </section>
+    {% endif %}
+
+    {% if agreement and pilot.stage not in ['awaiting_acceptance', 'draft'] %}
+    <details class="challenge-panel adv-history"><summary>Agreement version {{ pilot.agreementVersion }}</summary>{% include "pilot-agreement-summary.htm" %}</details>
+    {% endif %}
+</main>
+<script>
+    const base = `/api/startup/pilots/{{ pilot.pilotId }}`;
+    const statusLine = document.querySelector('[data-status]');
+    async function send(path, body) {
+        statusLine.textContent = 'Sending...';
+        const response = await fetch(`${base}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const result = await response.json();
+        statusLine.textContent = result.message;
+        statusLine.scrollIntoView({ block: 'nearest' });
+        if (response.ok) setTimeout(() => window.location.reload(), 500);
+    }
+    document.querySelector('[data-accept-form]')?.addEventListener('submit', event => {
+        event.preventDefault();
+        const form = event.target;
+        send('agreement/respond', { action: 'accept', version: {{ pilot.agreementVersion }}, signatoryName: form.elements.signatoryName.value, designation: form.elements.designation.value, confirm: form.elements.confirm.checked });
+    });
+    document.querySelector('[data-changes-form]')?.addEventListener('submit', event => {
+        event.preventDefault();
+        send('agreement/respond', { action: 'request_changes', comments: event.target.elements.comments.value });
+    });
+    const report = document.querySelector('[data-report-form]');
+    if (report) {
+        const incidentRows = report.querySelector('[data-incident-rows]');
+        report.querySelector('[data-add-incident]').onclick = () => {
+            const row = document.createElement('div');
+            row.className = 'plt-row';
+            row.dataset.incident = '';
+            row.innerHTML = `<label>Severity<select data-severity>{% for severity in severities %}<option>{{ severity }}</option>{% endfor %}</select></label>
+                <label class="plt-grow">What happened<input maxlength="4000" data-description></label>
+                <button class="text-button" type="button" onclick="this.closest('.plt-row').remove()">Remove</button>`;
+            incidentRows.append(row);
+        };
+        report.addEventListener('submit', event => {
+            event.preventDefault();
+            send('reports', {
+                summary: report.elements.summary.value,
+                blockers: report.elements.blockers.value,
+                measurements: [...report.querySelectorAll('[data-reading]')].filter(row => row.querySelector('[data-value]').value !== '').map(row => ({
+                    kpiId: row.dataset.kpi, value: row.querySelector('[data-value]').value, date: row.querySelector('[data-date]').value, evidence: row.querySelector('[data-evidence]').value
+                })),
+                milestoneClaims: [...report.querySelectorAll('[data-claim]')].filter(row => row.querySelector('[data-claimed]').checked).map(row => ({
+                    milestoneId: row.dataset.milestone, evidence: row.querySelector('[data-evidence]').value
+                })),
+                incidents: [...incidentRows.children].map(row => ({ severity: row.querySelector('[data-severity]').value, description: row.querySelector('[data-description]').value }))
+            });
+        });
+    }
+</script>
+<script src="/pilot-charts.js"></script>
+{% endblock %}

@@ -1,0 +1,148 @@
+{% extends "base.htm" %}
+
+{% block content %}
+{% set names = {} %}
+{% for item in leaderboard.applications %}{% set _ = names.update({item.application_id: item.startup_name}) %}{% endfor %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Advanced evaluation · {{ challenge.challengeId }}</div>
+            <h1>{{ challenge.title }}</h1>
+            <p class="dashboard-subtitle">Panel-scored, risk-adjusted ranking of eligible startups using quality-and-cost based selection.</p>
+        </div>
+        <div class="hero-actions">
+            <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/applications">Back to applications</a>
+            <a class="button outline" href="/government-dashboard/{{ challenge.challengeId }}/comparison">Evaluation comparison</a>
+            <a class="button" href="/government-dashboard/{{ challenge.challengeId }}/pilots">Sandbox &amp; pilots</a>
+        </div>
+    </section>
+
+    {% if locked %}
+    <p class="adv-notice">Final selection is confirmed for this challenge. Advanced evaluation is read-only.</p>
+    {% endif %}
+
+    <section class="challenge-panel adv-verdict">
+        {% if leaderboard.leader %}
+        <p class="adv-verdict-line"><strong>{{ names[leaderboard.leader] }}</strong> ranks first on risk-adjusted score.</p>
+        <p class="form-note">
+            {% if leaderboard.leader_is_robust %}The leader stays first when the technical weight moves between {{ leaderboard.scenarios | map(attribute='technicalWeight') | min if leaderboard.scenarios else config.technicalWeight }}% and {{ leaderboard.scenarios | map(attribute='technicalWeight') | max if leaderboard.scenarios else config.technicalWeight }}%, so the ranking is robust to weighting choices.
+            {% else %}The leader changes under other technical/financial weightings. Review the sensitivity table before relying on this order.{% endif %}
+            {% if not leaderboard.financial_applied %} Financial scoring is not applied because not every qualified startup has a financial proposal on record; ranking uses technical score only.{% endif %}
+        </p>
+        {% else %}
+        <p class="adv-verdict-line">No startup has cleared the technical threshold yet.</p>
+        <p class="form-note">Record panel scorecards on each eligible application. A startup needs a panel technical score of at least {{ '%g' | format(config.technicalThreshold) }} to be ranked.</p>
+        {% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head">
+            <h2>Ranking</h2>
+            <span class="form-note">{{ leaderboard.applications | length }} eligible applications{% if maximum_selected %} · up to {{ maximum_selected }} can be selected{% endif %}</span>
+        </div>
+        {% if leaderboard.applications %}
+        <div class="comparison-table-wrap">
+            <table class="comparison-table adv-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Startup</th>
+                        <th>Technical (panel)</th>
+                        <th>Financial</th>
+                        <th>Risk</th>
+                        <th>Risk-adjusted</th>
+                        <th>Rank under other weights</th>
+                        <th>Panel confidence</th>
+                        <th>Pre-assessment</th>
+                        <th>Recommendation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in leaderboard.applications %}
+                    <tr>
+                        <td data-label="Rank" class="adv-rank">{{ item.rank or '—' }}</td>
+                        <td data-label="Startup"><a href="/government-applications/{{ item.application_id }}/advanced-evaluation">{{ item.startup_name }}</a><small>{{ item.application_id }}</small></td>
+                        <td data-label="Technical (panel)">{% if item.technical_score is not none %}<strong>{{ '%.1f' | format(item.technical_score) }}</strong><small>{{ item.panel_size }} panelist{{ '' if item.panel_size == 1 else 's' }}</small>{% else %}<span class="form-note">Awaiting scores</span>{% endif %}</td>
+                        <td data-label="Financial">{% if item.financial_score is not none %}{{ '%.1f' | format(item.financial_score) }}<small>₹{{ '{:,.0f}'.format(item.quote) }}</small>{% elif item.quote %}<small>₹{{ '{:,.0f}'.format(item.quote) }}</small>{% else %}<span class="form-note">No proposal</span>{% endif %}</td>
+                        <td data-label="Risk"><span class="adv-risk adv-risk-{{ item.risk_level | lower | replace(' ', '-') }}">{{ item.risk_level }}</span>{% if item.risk_penalty_pct %}<small>−{{ '%.1f' | format(item.risk_penalty_pct) }}%</small>{% endif %}</td>
+                        <td data-label="Risk-adjusted">{% if item.risk_adjusted_score is not none %}<strong>{{ '%.2f' | format(item.risk_adjusted_score) }}</strong>{% else %}—{% endif %}</td>
+                        <td data-label="Rank under other weights">{% if item.rank_range %}{% if item.rank_range[0] == item.rank_range[1] %}Always {{ item.rank_range[0] }}{% else %}{{ item.rank_range[0] }} to {{ item.rank_range[1] }}{% endif %}{% else %}—{% endif %}</td>
+                        <td data-label="Panel confidence">{{ item.confidence }}{% if item.divergent_criteria %}<small>{{ item.divergent_criteria | length }} criterion needs consensus</small>{% endif %}</td>
+                        <td data-label="Pre-assessment">{{ item.pre_assessment_band }}<small>{{ '%.0f' | format(item.pre_assessment_indicator) }}/100</small></td>
+                        <td data-label="Recommendation"><span class="adv-rec adv-rec-{{ item.recommendation.split(':')[0] | lower | replace(' ', '-') }}">{{ item.recommendation }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="form-note">The ranking is advisory. Shortlisting and final selection are still recorded explicitly on the comparison and final-selection pages.</p>
+        {% else %}
+        <div class="empty-state"><p>No applications have passed eligibility screening yet. Screen applications first, then return here to score them with the panel.</p></div>
+        {% endif %}
+    </section>
+
+    {% if leaderboard.scenarios %}
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Weight sensitivity</h2><span class="form-note">Who ranks first if the technical/financial split changes</span></div>
+        <div class="comparison-table-wrap">
+            <table class="comparison-table">
+                <thead><tr><th>Technical / financial</th><th>First-ranked startup</th></tr></thead>
+                <tbody>
+                    <tr><td>{{ '%g' | format(config.technicalWeight) }} / {{ '%g' | format(config.financialWeight) }} (current)</td><td>{{ names.get(leaderboard.leader, 'No qualified startup') }}</td></tr>
+                    {% for scenario in leaderboard.scenarios %}
+                    <tr><td>{{ '%g' | format(scenario.technicalWeight) }} / {{ '%g' | format(scenario.financialWeight) }}</td><td>{{ names.get(scenario.leader, 'No qualified startup') }}{% if scenario.leader != leaderboard.leader %} <span class="adv-risk adv-risk-medium">changes</span>{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Evaluation rules</h2><span class="form-note">Changes after scoring starts need a recorded reason</span></div>
+        <form class="adv-config" data-config-form data-challenge-id="{{ challenge.challengeId }}">
+            <label>Technical weight (%)<input type="number" name="technicalWeight" min="50" max="100" step="1" value="{{ '%g' | format(config.technicalWeight) }}" {{ 'disabled' if locked }}></label>
+            <label>Financial weight (%)<input type="number" name="financialWeight" min="0" max="50" step="1" value="{{ '%g' | format(config.financialWeight) }}" readonly></label>
+            <label>Technical qualifying threshold (0–100)<input type="number" name="technicalThreshold" min="0" max="100" step="1" value="{{ '%g' | format(config.technicalThreshold) }}" {{ 'disabled' if locked }}></label>
+            <label>Panel aggregation<select name="aggregation" {{ 'disabled' if locked }}>{% for key, label in aggregation_methods.items() %}<option value="{{ key }}" {{ 'selected' if config.aggregation == key }}>{{ label }}</option>{% endfor %}</select></label>
+            <label>Minimum panel size<input type="number" name="minimumPanelSize" min="1" max="15" step="1" value="{{ config.minimumPanelSize }}" {{ 'disabled' if locked }}></label>
+            <label>Divergence alert (% of criterion maximum)<input type="number" name="divergenceThreshold" min="5" max="100" step="1" value="{{ '%g' | format(config.divergenceThreshold) }}" {{ 'disabled' if locked }}></label>
+            <label>Maximum risk penalty (%)<input type="number" name="riskPenaltyMax" min="0" max="30" step="0.5" value="{{ '%g' | format(config.riskPenaltyMax) }}" {{ 'disabled' if locked }}></label>
+            <label class="adv-wide">Reason for change<textarea name="reason" rows="2" maxlength="2000" {{ 'disabled' if locked }}></textarea></label>
+            {% if not locked %}
+            <div class="adv-wide adv-actions"><button class="button" type="submit">Save rules</button><span class="form-message" data-config-status role="status"></span></div>
+            {% endif %}
+        </form>
+        {% if config_history %}
+        <details class="adv-history"><summary>Rule change history ({{ config_history | length }})</summary>
+            <div class="dashboard-progress-list">{% for entry in config_history %}<span>{{ entry.at }} · {{ entry.actor }} · technical {{ '%g' | format(entry.updated.technicalWeight) }}%, threshold {{ '%g' | format(entry.updated.technicalThreshold) }}, {{ entry.updated.aggregation | replace('_', ' ') }}{% if entry.reason %} · {{ entry.reason }}{% endif %}</span>{% endfor %}</div>
+        </details>
+        {% endif %}
+    </section>
+</main>
+<script>
+    const configForm = document.querySelector('[data-config-form]');
+    if (configForm) {
+        const technical = configForm.elements.technicalWeight;
+        technical.addEventListener('input', () => {
+            const value = Number(technical.value);
+            if (Number.isFinite(value)) configForm.elements.financialWeight.value = Math.max(0, 100 - value);
+        });
+        configForm.addEventListener('submit', async event => {
+            event.preventDefault();
+            const status = configForm.querySelector('[data-config-status]');
+            const fields = ['technicalWeight', 'financialWeight', 'technicalThreshold', 'aggregation', 'minimumPanelSize', 'divergenceThreshold', 'riskPenaltyMax'];
+            const config = Object.fromEntries(fields.map(name => [name, configForm.elements[name].value]));
+            status.textContent = 'Saving rules...';
+            const response = await fetch(`/api/government/challenges/${configForm.dataset.challengeId}/advanced-evaluation/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ config, reason: configForm.elements.reason.value })
+            });
+            const result = await response.json();
+            status.textContent = result.message;
+            if (response.ok) window.location.reload();
+        });
+    }
+</script>
+{% endblock %}

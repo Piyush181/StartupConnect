@@ -1,4 +1,5 @@
 import json
+import math
 from datetime import datetime
 from pathlib import Path
 from datetime import timedelta
@@ -6,6 +7,9 @@ import os
 from functools import wraps
 
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session
+
+import advanced_evaluation
+import pilot_engine
 
 from database import (
     DatabaseConfigurationError,
@@ -16,6 +20,22 @@ from database import (
     count_challenge_applications,
     get_startup_profile,
     get_startup_application,
+    get_startup_clarification_request,
+    get_government_application,
+    get_application_screening,
+    start_application_screening,
+    save_application_screening,
+    finalize_application_screening,
+    start_application_evaluation,
+    get_application_evaluation,
+    save_application_evaluation,
+    complete_application_evaluation,
+    list_challenge_evaluation_comparison,
+    record_application_shortlist_decision,
+    get_application_shortlist_history,
+    confirm_challenge_final_selection,
+    get_application_final_selection,
+    get_challenge_final_selection,
     get_application,
     list_challenge_applications,
     list_startup_applications,
@@ -30,6 +50,8 @@ from database import (
 
 ROOT = Path(__file__).parent
 CHALLENGE_STORE_PATH = ROOT / "challenge_store.json"
+ADVANCED_EVALUATION_STORE_PATH = ROOT / "advanced_evaluation_store.json"
+PILOT_STORE_PATH = ROOT / "pilot_store.json"
 FIXED_GOVERNMENT_BODY = "Maharashtra State Innovation Society"
 FIXED_DEPARTMENT = "Department of Skills, Employment, Entrepreneurship and Innovation"
 FIXED_STATE = "Maharashtra"
@@ -151,6 +173,93 @@ SAMPLE_CONTRACTS = {
     }
 }
 
+SAMPLE_CHALLENGE_RECORDS = [
+    {
+        "challengeId": "PS-MH-038",
+        "title": "Low-cost remote screening for diabetic retinopathy",
+        "department": "Public Health Department",
+        "ministry": "Public Health Department, Government of Maharashtra",
+        "category": "Health-tech",
+        "challengeType": "Software",
+        "description": "Help frontline health workers identify diabetic retinopathy risk earlier and route patients for timely clinical review.",
+        "budget": "₹50–75 lakh",
+        "budgetAmount": 5000000,
+        "deadline": "2027-02-28",
+        "objectives": ["Support low-bandwidth screening", "Improve referral follow-up"],
+        "requirements": ["Works on mobile devices", "Supports Marathi and English", "Protects patient data"],
+    },
+    {
+        "challengeId": "PS-MH-045",
+        "title": "Water quality monitoring for rural supply networks",
+        "department": "Water Resources Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Climate-tech",
+        "challengeType": "Hardware",
+        "description": "Improve the timeliness and coverage of water quality monitoring across rural supply networks.",
+        "budget": "₹25–40 lakh",
+        "budgetAmount": 2500000,
+        "deadline": "2027-03-31",
+        "objectives": ["Detect water quality issues earlier", "Support field response"],
+        "requirements": ["Field-ready monitoring", "Offline-capable reporting", "Maintenance plan"],
+    },
+    {
+        "challengeId": "PS-MH-047",
+        "title": "Accessible digital services for citizen centres",
+        "department": "General Administration Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Gov-tech",
+        "challengeType": "Software",
+        "description": "Make common government services more accessible through assisted digital workflows at citizen centres.",
+        "budget": "₹35–55 lakh",
+        "budgetAmount": 3500000,
+        "deadline": "2027-04-30",
+        "objectives": ["Reduce service completion time", "Improve accessibility"],
+        "requirements": ["Accessible user experience", "Audit trail", "Multilingual support"],
+    },
+    {
+        "challengeId": "PS-MH-050",
+        "title": "Smart traffic signal coordination",
+        "department": "Urban Development Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Mobility",
+        "challengeType": "Hybrid",
+        "description": "Coordinate traffic signals using current road conditions to reduce congestion and improve travel reliability.",
+        "budget": "₹60–90 lakh",
+        "budgetAmount": 6000000,
+        "deadline": "2027-05-31",
+        "objectives": ["Reduce intersection delays", "Provide operational visibility"],
+        "requirements": ["Integrates with existing signals", "Provides operator controls", "Reports measurable outcomes"],
+    },
+    {
+        "challengeId": "PS-MH-052",
+        "title": "Primary school nutrition tracking",
+        "department": "School Education Department",
+        "ministry": "Government of Maharashtra",
+        "category": "Health-tech",
+        "challengeType": "Software",
+        "description": "Help schools and local administrators track nutrition program delivery and identify service gaps.",
+        "budget": "₹20–30 lakh",
+        "budgetAmount": 2000000,
+        "deadline": "2027-06-30",
+        "objectives": ["Improve delivery visibility", "Identify underserved schools"],
+        "requirements": ["Simple school workflows", "Privacy-conscious records", "Exportable reports"],
+    },
+    {
+        "challengeId": "PS-MH-055",
+        "title": "Marathi language public assistant",
+        "department": "Information Technology Department",
+        "ministry": "Government of Maharashtra",
+        "category": "AI / ML",
+        "challengeType": "Software",
+        "description": "Provide a Marathi-first digital assistant that helps residents find reliable public service information.",
+        "budget": "₹40–60 lakh",
+        "budgetAmount": 4000000,
+        "deadline": "2027-07-31",
+        "objectives": ["Improve access to service information", "Support Marathi-language queries"],
+        "requirements": ["Grounded in approved public information", "Escalation to official channels", "Usage reporting"],
+    },
+]
+
 
 def _now_iso():
     return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -265,8 +374,50 @@ def _serialize_challenges():
     return sorted(challenges, key=lambda item: item.get("updatedAt", ""), reverse=True)
 
 
-def _challenge_by_id(challenge_id):
-    return next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id or item.get("id") == challenge_id), None)
+def _sample_challenges():
+    challenges = []
+    for sample in SAMPLE_CHALLENGE_RECORDS:
+        challenges.append({
+            "id": f"sample-{sample['challengeId'].lower()}",
+            "challengeId": sample["challengeId"],
+            "title": sample["title"],
+            "status": "start bidding",
+            "category": sample["category"],
+            "challengeType": sample["challengeType"],
+            "difficulty": "Intermediate",
+            "ministry": sample["ministry"],
+            "department": sample["department"],
+            "state": "Maharashtra",
+            "createdBy": "sample-fixture",
+            "isSample": True,
+            "bidStartPrice": sample["budgetAmount"],
+            "currentBidPrice": sample["budgetAmount"],
+            "problemStatement": {"description": sample["description"], "impact": sample["description"]},
+            "objectives": sample["objectives"],
+            "requirements": {"mandatory": sample["requirements"], "optional": []},
+            "constraints": {"budget": {"estimatedBudget": sample["budget"], "budgetType": "Indicative"}},
+            "eligibility": {"participantTypes": ["Startups"], "minTeamSize": "1", "maxTeamSize": "10", "requiredSkills": []},
+            "timeline": {"registrationOpen": "2026-09-26", "registrationClose": sample["deadline"], "submissionOpen": "2026-09-26", "submissionDeadline": sample["deadline"], "evaluationStart": "", "resultsDate": ""},
+            "evaluationCriteria": [
+                {"criterion": "Technical Quality", "description": "Solution quality and feasibility", "weight": 40},
+                {"criterion": "Public Impact", "description": "Expected public-service impact", "weight": 35},
+                {"criterion": "Scalability", "description": "Operational scalability", "weight": 25},
+            ],
+            "createdAt": "2026-09-26T00:00:00Z",
+            "updatedAt": "2026-09-26T00:00:00Z",
+        })
+    return challenges
+
+
+def _discoverable_challenges():
+    real_challenges = _serialize_challenges()
+    real_ids = {item.get("challengeId") for item in real_challenges}
+    return real_challenges + [item for item in _sample_challenges() if item.get("challengeId") not in real_ids]
+
+
+def _challenge_by_id(challenge_id, include_samples=False):
+    challenges = _discoverable_challenges() if include_samples else _serialize_challenges()
+    return next((item for item in challenges if item.get("challengeId") == challenge_id or item.get("id") == challenge_id), None)
 
 
 APPLICATION_FIELDS = {
@@ -302,6 +453,112 @@ REQUIRED_APPLICATION_FIELDS = {
 }
 
 
+def _eligibility_requirements(challenge):
+    eligibility = challenge.get("eligibility") or {}
+    if not isinstance(eligibility, dict):
+        return []
+    requirements = []
+    participant_types = eligibility.get("participantTypes") or []
+    if isinstance(participant_types, str):
+        participant_types = [participant_types]
+    if participant_types:
+        requirements.append("Eligible participant types: " + ", ".join(str(value) for value in participant_types))
+    minimum = str(eligibility.get("minTeamSize") or "").strip()
+    maximum = str(eligibility.get("maxTeamSize") or "").strip()
+    if minimum or maximum:
+        requirements.append(f"Team size: {minimum or 'any'} to {maximum or 'any'}")
+    skills = eligibility.get("requiredSkills") or []
+    if isinstance(skills, str):
+        skills = [skills]
+    if skills:
+        requirements.append("Required skills: " + ", ".join(str(value) for value in skills))
+    known = {"participantTypes", "minTeamSize", "maxTeamSize", "requiredSkills"}
+    for key, value in eligibility.items():
+        if key in known or value in (None, "", [], {}):
+            continue
+        rendered = ", ".join(str(item) for item in value) if isinstance(value, list) else json.dumps(value, ensure_ascii=True) if isinstance(value, dict) else str(value)
+        label = " ".join(part.capitalize() for part in str(key).replace("_", " ").split())
+        requirements.append(f"{label}: {rendered}")
+    return requirements
+
+
+def _application_status_fields(application):
+    status = application.get("status", "submitted")
+    eligible_statuses = {"eligible", "under_evaluation", "evaluation_complete", "shortlisted", "not_selected", "selected"}
+    eligibility_status = "Eligible" if status in eligible_statuses else {
+        "ineligible": "Ineligible",
+        "clarification_requested": "Clarification Requested",
+    }.get(status, "Pending")
+    evaluation_status = {
+        "under_evaluation": "Under Evaluation",
+        "evaluation_complete": "Evaluation Complete",
+        "shortlisted": "Evaluation Complete",
+        "not_selected": "Evaluation Complete",
+        "selected": "Evaluation Complete",
+    }.get(status, "Not Started" if status == "eligible" else "Locked" if status == "ineligible" else "Not Started")
+    return {**application, "eligibility_status": eligibility_status, "evaluation_status": evaluation_status}
+
+
+def _maximum_selected_startups(challenge):
+    configuration = challenge.get("selectionConfiguration") or challenge.get("selectionConfig") or {}
+    if not isinstance(configuration, dict):
+        raise ValueError("Challenge selection configuration must be an object.")
+    configured_limit = configuration.get("maximumSelectedStartups", configuration.get("maxSelectedStartups"))
+    if configured_limit in (None, ""):
+        return None
+    try:
+        numeric_limit = float(configured_limit)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Maximum selected startups must be a positive whole number.") from error
+    if not math.isfinite(numeric_limit) or not numeric_limit.is_integer() or numeric_limit < 1:
+        raise ValueError("Maximum selected startups must be a positive whole number.")
+    return int(numeric_limit)
+
+
+def _evaluation_criteria(challenge):
+    raw_criteria = challenge.get("evaluationCriteria")
+    if not isinstance(raw_criteria, list) or not raw_criteria:
+        raw_criteria = [
+            {"criterion": "Problem Relevance", "description": "Fit to the published problem", "weight": 20, "maximumScore": 5},
+            {"criterion": "Technical Feasibility", "description": "Technical viability and risks", "weight": 20, "maximumScore": 5},
+            {"criterion": "Innovation", "description": "Novelty and differentiation", "weight": 15, "maximumScore": 5},
+            {"criterion": "Implementation Approach", "description": "Delivery plan and practicality", "weight": 15, "maximumScore": 5},
+            {"criterion": "Team Capability", "description": "Relevant capability and experience", "weight": 10, "maximumScore": 5},
+            {"criterion": "Expected Impact", "description": "Expected public value", "weight": 10, "maximumScore": 5},
+            {"criterion": "Scalability", "description": "Potential to scale", "weight": 10, "maximumScore": 5},
+        ]
+    criteria = []
+    seen = set()
+    for item in raw_criteria:
+        if not isinstance(item, dict):
+            raise ValueError("Every evaluation criterion must be a structured object.")
+        name = str(item.get("criterion") or "").strip()
+        if not name:
+            raise ValueError("Every evaluation criterion needs a name.")
+        if name.casefold() in seen:
+            raise ValueError("Evaluation criterion names must be unique.")
+        seen.add(name.casefold())
+        maximum_raw = item.get("maximumScore", item.get("maxScore", item.get("maximum_score", 100)))
+        weight_raw = item.get("weight", maximum_raw)
+        try:
+            maximum_score = float(maximum_raw)
+            weight = float(weight_raw)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"Criterion {name} must have numeric maximum and weight values.") from error
+        if not math.isfinite(maximum_score) or maximum_score <= 0 or not math.isfinite(weight) or weight <= 0:
+            raise ValueError(f"Criterion {name} must have positive maximum and weight values.")
+        required_value = item.get("required", item.get("isRequired", True))
+        required = not (required_value is False or str(required_value).strip().casefold() in {"false", "no", "0", "optional"})
+        criteria.append({
+            "criterion": name,
+            "description": str(item.get("description") or ""),
+            "maximum_score": maximum_score,
+            "weight": weight,
+            "required": required,
+        })
+    return criteria
+
+
 def _startup_is_eligible(challenge, profile):
     eligibility = challenge.get("eligibility") or {}
     participant_types = eligibility.get("participantTypes") or []
@@ -326,7 +583,7 @@ def _startup_is_eligible(challenge, profile):
 
 def _contract_view(contract_id):
     contract = SAMPLE_CONTRACTS.get(contract_id.upper())
-    challenge = _challenge_by_id(contract_id)
+    challenge = _challenge_by_id(contract_id, include_samples=True)
     if challenge:
         problem = challenge.get("problemStatement") or {}
         budget = (challenge.get("constraints") or {}).get("budget") or {}
@@ -350,6 +607,7 @@ def _contract_view(contract_id):
             "bids": challenge.get("bids", []),
             "assignedStartupId": challenge.get("assignedStartupId"),
             "challenge": challenge,
+            "is_sample": bool(challenge.get("isSample")),
         }
     if contract:
         contract = dict(contract)
@@ -429,6 +687,7 @@ def _public_challenge(challenge):
         bids_received = 0
     return {
         "challengeId": challenge.get("challengeId"),
+        "isSample": bool(challenge.get("isSample")),
         "title": challenge.get("title"),
         "status": challenge.get("status"),
         "category": challenge.get("category"),
@@ -680,7 +939,7 @@ def _generate_ai_draft(description, additional_requirements="", ministry_context
 
 @app.get("/")
 def home():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     try:
         startup_count = len(list_startup_directory())
     except Exception:
@@ -702,9 +961,22 @@ def pages_stylesheet():
     return send_from_directory(ROOT, "pages.css", mimetype="text/css")
 
 
+def _demo_mode():
+    """Show demo sign-in shortcuts only when explicitly enabled (never in production)."""
+    return os.getenv("STARTUP_CONNECT_DEMO_MODE", "false").strip().lower() in {"true", "1", "yes", "on"}
+
+
+@app.get("/pilot-charts.js")
+def pilot_charts_script():
+    return send_from_directory(ROOT, "pilot-charts.js", mimetype="text/javascript")
+
+
 @app.get("/<page>")
 def page(page):
     pages = {"directory", "how-it-works", "login", "join", "register", "government-dashboard", "create-challenge", "public-challenges"}
+    if page == "login" and _demo_mode():
+        from database import DEMO_STARTUPS
+        return render_template("login.htm", demo_accounts=DEMO_STARTUPS)
     if page in pages:
         return render_template(f"{page}.htm")
     return ("Page not found", 404)
@@ -731,13 +1003,13 @@ def challenges():
 
 @app.get("/public-challenges")
 def public_challenges():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     return render_template("public-challenges.htm", challenges=challenges)
 
 
 @app.get("/public-challenges/<challenge_id>")
 def public_challenge_view(challenge_id):
-    challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
+    challenge = next((item for item in _discoverable_challenges() if item.get("challengeId") == challenge_id), None)
     if not challenge or challenge.get("status") not in {"start bidding", "Ongoing", "Completed"}:
         return ("Challenge not found", 404)
     return render_template("public-challenge-view.htm", challenge=_public_challenge(challenge))
@@ -745,7 +1017,7 @@ def public_challenge_view(challenge_id):
 
 @app.get("/api/public/challenges")
 def public_challenges_api():
-    challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
+    challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") in {"start bidding", "Ongoing", "Completed"}]
     return jsonify({"ok": True, "challenges": challenges})
 
 
@@ -822,6 +1094,35 @@ def assign_challenge_startup(challenge_id):
     return jsonify({"ok": True, "challenge": challenge, "message": "Contract assigned and moved to ongoing."})
 
 
+@app.get("/periodic-checks")
+@session_required("ministry")
+def government_periodic_checks():
+    today = _today()
+    rows = _ministry_programme_rows(today)
+    monitored = [row for row in rows if row["stage"] in {"active", "suspended"}]
+    queue = [
+        {**item, "row": row}
+        for row in rows if row["stage"] not in pilot_engine.TERMINAL_STAGES
+        for item in row["attention"]["items"]
+    ]
+    queue.sort(key=lambda item: (pilot_engine.ATTENTION_ORDER[item["kind"]], item["date"] or "9999"))
+    summary = {
+        "overdue": sum(1 for row in monitored if row["attention"]["report"]["status"] == "Overdue"),
+        "to_verify": sum(row["attention"]["counts"]["pending_readings"] + row["attention"]["counts"]["claims"] for row in rows),
+        "due_soon": sum(1 for row in monitored if row["attention"]["report"]["status"] in {"Due now", "Due soon"}),
+        "serious_incidents": sum(row["attention"]["counts"]["open_serious"] for row in rows),
+    }
+    monitored.sort(key=lambda row: (row["attention"]["report"]["next_due"] or "9999"))
+    return render_template(
+        "periodic-checks.htm",
+        challenges=_owned_challenges(),
+        monitored=monitored,
+        queue=queue,
+        summary=summary,
+        today=today.isoformat(),
+    )
+
+
 @app.get("/create-challenge")
 @session_required("ministry")
 def create_challenge():
@@ -865,6 +1166,10 @@ def save_challenge():
     challenge["ministry"] = FIXED_GOVERNMENT_BODY
     challenge["department"] = FIXED_DEPARTMENT
     challenge["state"] = FIXED_STATE
+    try:
+        _maximum_selected_startups(challenge)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
     if challenge.get("status") == "Published":
         criteria = challenge.get("evaluationCriteria") or []
         total_weight = sum(float(item.get("weight", 0) or 0) for item in criteria if isinstance(item, dict))
@@ -982,7 +1287,7 @@ def schedule_periodic_check(challenge_id):
         return jsonify({"ok": False, "message": "A first report date is required."}), 400
 
     store = _read_store()
-    challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
+    challenge = next((item for item in _owned_challenges() if item.get("challengeId") == challenge_id), None)
     if not challenge:
         return jsonify({"ok": False, "message": "Challenge not found."}), 404
     check = {
@@ -1060,7 +1365,7 @@ def startup_periodic_checks():
     startup_id = session.get("business_id") or "startup-user"
     checks = []
     for challenge in _serialize_challenges():
-        if challenge.get("status") != "Published":
+        if challenge.get("status") not in {"Published", "start bidding"}:
             continue
         for check in challenge.get("periodicChecks", []):
             reports = [report for report in check.get("reports", []) if report.get("startupId") == startup_id]
@@ -1121,7 +1426,7 @@ def government_periodic_reports():
     if auth_error is not None:
         return auth_error
     reports = []
-    for challenge in _serialize_challenges():
+    for challenge in _owned_challenges():
         for check in challenge.get("periodicChecks", []):
             for report in check.get("reports", []):
                 reports.append({
@@ -1144,7 +1449,7 @@ def review_periodic_report(report_id):
     if decision not in {"Accepted", "Changes Requested"}:
         return jsonify({"ok": False, "message": "Choose Accepted or Changes Requested."}), 400
     store = _read_store()
-    for challenge in _serialize_challenges():
+    for challenge in _owned_challenges():
         for check in challenge.get("periodicChecks", []):
             for report in check.get("reports", []):
                 if report.get("reportId") != report_id:
@@ -1176,6 +1481,269 @@ def review_periodic_report(report_id):
                     app.logger.exception("Report %s was reviewed locally but could not be updated in contract_reports.", report_id)
                 return jsonify({"ok": True, "report": report, "message": "Report review saved."})
     return jsonify({"ok": False, "message": "Report not found."}), 404
+
+
+SANDBOX_MODES = {"Sandbox", "Pilot"}
+SANDBOX_CADENCES = {"Weekly", "Biweekly", "Monthly"}
+SANDBOX_MILESTONE_STATUSES = {"Pending", "On Track", "At Risk", "Completed"}
+SANDBOX_DECISIONS = {"Move to Active", "Approve to Scale", "Extend Program", "Terminate Program"}
+
+
+def _find_ministry_challenge(challenge_id):
+    """Return (store, challenge) for a challenge owned by the signed-in ministry user."""
+    store = _read_store()
+    challenge = next((item for item in _serialize_challenges() if item.get("challengeId") == challenge_id), None)
+    if not challenge or challenge.get("createdBy") != session.get("ministry_id"):
+        return store, None
+    return store, challenge
+
+
+def _save_ministry_challenge(store, challenge):
+    challenge["updatedAt"] = _now_iso()
+    for bucket in ("drafts", "published"):
+        if challenge.get("id") in store.get(bucket, {}):
+            store[bucket][challenge["id"]] = challenge
+            break
+    _write_store(store)
+    _persist_contract(challenge)
+
+
+@app.get("/sandbox-pilots")
+@session_required("ministry")
+def sandbox_pilots():
+    challenges = [
+        item for item in _serialize_challenges()
+        if item.get("createdBy") == session.get("ministry_id")
+        and (item.get("status") == "Ongoing" or item.get("sandboxPilot"))
+    ]
+    programs = [item.get("sandboxPilot") for item in challenges if item.get("sandboxPilot")]
+    stage_counts = {
+        "design": sum(1 for program in programs if program.get("stage") == "Design"),
+        "active": sum(1 for program in programs if program.get("stage") == "Active"),
+        "scaled": sum(1 for program in programs if program.get("stage") == "Scaled"),
+        "terminated": sum(1 for program in programs if program.get("stage") == "Terminated"),
+    }
+    owned = {item.get("challengeId"): item for item in _serialize_challenges() if item.get("createdBy") == session.get("ministry_id")}
+    today = _today()
+    pilot_programmes = []
+    for pilot in _read_pilot_store().values():
+        if pilot.get("challengeId") not in owned:
+            continue
+        row = next(iter(pilot_engine.cohort_comparison([pilot], today)))
+        row.update({"challengeId": pilot["challengeId"], "challengeTitle": owned[pilot["challengeId"]].get("title")})
+        pilot_programmes.append(row)
+    pilot_ready_challenges = []
+    for challenge_id, challenge in owned.items():
+        try:
+            if get_challenge_final_selection(challenge_id):
+                pilot_ready_challenges.append(challenge)
+        except Exception:
+            app.logger.exception("Could not check final selection for %s.", challenge_id)
+    return render_template(
+        "sandbox-pilots.htm",
+        challenges=challenges,
+        program_count=len(programs),
+        stage_counts=stage_counts,
+        pilot_programmes=sorted(pilot_programmes, key=lambda row: row["stage"] in pilot_engine.TERMINAL_STAGES),
+        pilot_ready_challenges=pilot_ready_challenges,
+    )
+
+
+@app.post("/api/challenges/<challenge_id>/sandbox-pilot")
+def design_sandbox_pilot(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    store, challenge = _find_ministry_challenge(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if not challenge.get("assignedStartupId"):
+        return jsonify({"ok": False, "message": "Assign a startup to this contract before designing a sandbox or pilot."}), 400
+
+    data = request.get_json(silent=True) or {}
+    mode = str(data.get("mode") or "").strip()
+    if mode not in SANDBOX_MODES:
+        return jsonify({"ok": False, "message": "Choose Sandbox or Pilot as the program mode."}), 400
+    scope = str(data.get("scope") or "").strip()
+    if not scope:
+        return jsonify({"ok": False, "message": "Describe the scope of the controlled test."}), 400
+    start_date = str(data.get("startDate") or "").strip()
+    if not start_date:
+        return jsonify({"ok": False, "message": "A start date is required."}), 400
+    cadence = str(data.get("monitoringCadence") or "Monthly").strip()
+    if cadence not in SANDBOX_CADENCES:
+        return jsonify({"ok": False, "message": "Choose a valid monitoring cadence."}), 400
+    try:
+        budget_ceiling = float(data.get("budgetCeiling") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Budget ceiling must be a number."}), 400
+    if budget_ceiling < 0:
+        return jsonify({"ok": False, "message": "Budget ceiling cannot be negative."}), 400
+    try:
+        cohort_size = int(data.get("cohortSize") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Cohort size must be a number."}), 400
+
+    program = challenge.get("sandboxPilot") or {
+        "programId": f"SBX-{challenge_id}",
+        "stage": "Design",
+        "milestones": [],
+        "decisions": [],
+        "createdAt": _now_iso(),
+    }
+    program.update({
+        "mode": mode,
+        "scope": scope,
+        "cohortSize": max(cohort_size, 0),
+        "startDate": start_date,
+        "endDate": str(data.get("endDate") or "").strip(),
+        "successCriteria": str(data.get("successCriteria") or "").strip(),
+        "riskSafeguards": str(data.get("riskSafeguards") or "").strip(),
+        "exitCriteria": str(data.get("exitCriteria") or "").strip(),
+        "monitoringCadence": cadence,
+        "budgetCeiling": round(budget_ceiling, 2),
+        "updatedAt": _now_iso(),
+    })
+    challenge["sandboxPilot"] = program
+    _save_ministry_challenge(store, challenge)
+    return jsonify({"ok": True, "sandboxPilot": program, "message": "Sandbox / pilot design saved."})
+
+
+@app.post("/api/challenges/<challenge_id>/sandbox-pilot/milestones")
+def add_sandbox_pilot_milestone(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    store, challenge = _find_ministry_challenge(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    program = challenge.get("sandboxPilot")
+    if not program:
+        return jsonify({"ok": False, "message": "Design the sandbox or pilot before adding milestones."}), 400
+
+    data = request.get_json(silent=True) or {}
+    title = str(data.get("title") or "").strip()
+    if not title:
+        return jsonify({"ok": False, "message": "A milestone title is required."}), 400
+    due_date = str(data.get("dueDate") or "").strip()
+    if not due_date:
+        return jsonify({"ok": False, "message": "A milestone due date is required."}), 400
+
+    milestone = {
+        "milestoneId": f"MS-{challenge_id}-{len(program.get('milestones', [])) + 1:03d}",
+        "title": title,
+        "dueDate": due_date,
+        "status": "Pending",
+        "notes": str(data.get("notes") or "").strip(),
+        "updatedAt": _now_iso(),
+    }
+    program.setdefault("milestones", []).append(milestone)
+    program["updatedAt"] = _now_iso()
+    challenge["sandboxPilot"] = program
+    _save_ministry_challenge(store, challenge)
+    return jsonify({"ok": True, "milestone": milestone, "message": "Milestone added."})
+
+
+@app.post("/api/challenges/<challenge_id>/sandbox-pilot/milestones/<milestone_id>")
+def update_sandbox_pilot_milestone(challenge_id, milestone_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    store, challenge = _find_ministry_challenge(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    program = challenge.get("sandboxPilot")
+    milestone = next((item for item in (program or {}).get("milestones", []) if item.get("milestoneId") == milestone_id), None)
+    if not milestone:
+        return jsonify({"ok": False, "message": "Milestone not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    status = str(data.get("status") or "").strip()
+    if status not in SANDBOX_MILESTONE_STATUSES:
+        return jsonify({"ok": False, "message": "Choose a valid milestone status."}), 400
+    milestone["status"] = status
+    if "notes" in data:
+        milestone["notes"] = str(data.get("notes") or "").strip()
+    milestone["updatedAt"] = _now_iso()
+    program["updatedAt"] = _now_iso()
+    challenge["sandboxPilot"] = program
+    _save_ministry_challenge(store, challenge)
+    return jsonify({"ok": True, "milestone": milestone, "message": "Milestone updated."})
+
+
+@app.post("/api/challenges/<challenge_id>/sandbox-pilot/decision")
+def record_sandbox_pilot_decision(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    store, challenge = _find_ministry_challenge(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    program = challenge.get("sandboxPilot")
+    if not program:
+        return jsonify({"ok": False, "message": "Design the sandbox or pilot before recording a stage-gate decision."}), 400
+
+    data = request.get_json(silent=True) or {}
+    decision = str(data.get("decision") or "").strip()
+    if decision not in SANDBOX_DECISIONS:
+        return jsonify({"ok": False, "message": "Choose a valid stage-gate decision."}), 400
+    rationale = str(data.get("rationale") or "").strip()
+    if not rationale:
+        return jsonify({"ok": False, "message": "A rationale is required for the stage-gate decision."}), 400
+
+    stage = program.get("stage", "Design")
+    valid_from = {
+        "Move to Active": {"Design"},
+        "Approve to Scale": {"Active"},
+        "Extend Program": {"Active"},
+        "Terminate Program": {"Design", "Active"},
+    }
+    if stage not in valid_from.get(decision, set()):
+        return jsonify({"ok": False, "message": f"\u201c{decision}\u201d is not available while the program is in the {stage} stage."}), 400
+
+    if decision == "Move to Active":
+        program["stage"] = "Active"
+    elif decision == "Approve to Scale":
+        program["stage"] = "Scaled"
+        challenge["status"] = "Completed"
+    elif decision == "Extend Program":
+        new_end_date = str(data.get("newEndDate") or "").strip()
+        if not new_end_date:
+            return jsonify({"ok": False, "message": "Provide a new end date to extend the program."}), 400
+        program["endDate"] = new_end_date
+    elif decision == "Terminate Program":
+        program["stage"] = "Terminated"
+
+    program.setdefault("decisions", []).append({
+        "decisionId": f"DEC-{challenge_id}-{len(program.get('decisions', [])) + 1:03d}",
+        "decision": decision,
+        "rationale": rationale,
+        "decidedAt": _now_iso(),
+    })
+    program["updatedAt"] = _now_iso()
+    challenge["sandboxPilot"] = program
+    _save_ministry_challenge(store, challenge)
+    return jsonify({"ok": True, "sandboxPilot": program, "challenge": challenge, "message": f"Decision recorded: {decision}."})
+
+
+@app.get("/api/sandbox-pilots")
+def list_sandbox_pilots():
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    programs = []
+    for challenge in _serialize_challenges():
+        if challenge.get("createdBy") != session.get("ministry_id"):
+            continue
+        program = challenge.get("sandboxPilot")
+        if not program:
+            continue
+        programs.append({
+            "challengeId": challenge.get("challengeId"),
+            "challengeTitle": challenge.get("title"),
+            "sandboxPilot": program,
+        })
+    return jsonify({"ok": True, "programs": programs})
 
 
 @app.post("/api/register")
@@ -1236,25 +1804,30 @@ def startup_portal():
     if not profile:
         session.clear()
         return redirect("/login")
-    available_challenges = [_public_challenge(item) for item in _serialize_challenges() if item.get("status") == "start bidding"]
+    available_challenges = [_public_challenge(item) for item in _discoverable_challenges() if item.get("status") == "start bidding"]
     try:
         applications = list_startup_applications(session["business_id"])
     except Exception:
         app.logger.exception("Could not load applications for the startup portal.")
         applications = []
     for application in applications:
-        challenge = _challenge_by_id(application["challenge_id"])
+        challenge = _challenge_by_id(application["challenge_id"], include_samples=True)
         application["challenge_title"] = challenge.get("title") if challenge else "Challenge no longer available"
     assigned_contracts = [
         challenge for challenge in _serialize_challenges()
         if challenge.get("assignedStartupId") == session["business_id"]
     ]
+    pilots_by_application = {
+        pilot["applicationId"]: pilot for pilot in _read_pilot_store().values()
+        if pilot.get("businessId") == session["business_id"]
+    }
     return render_template(
         "startup-portal.htm",
         profile=profile,
         available_challenges=available_challenges,
         applications=applications,
         assigned_contracts=assigned_contracts,
+        pilots_by_application=pilots_by_application,
     )
 
 
@@ -1287,20 +1860,25 @@ def start_contract_application(contract_id):
         return ("Startup profile not found", 404)
     try:
         application = get_startup_application(contract["id"], session["business_id"])
+        clarification_requirements = (
+            get_startup_clarification_request(application["application_id"], session["business_id"])
+            if application and application.get("status") == "clarification_requested"
+            else []
+        )
     except Exception:
         app.logger.exception("Could not load the startup's application for %s.", contract_id)
         return ("Applications are temporarily unavailable.", 503)
     closed = contract.get("status") != "start bidding"
     if closed and not application:
-        return render_template("application-start.htm", contract=contract, profile=profile, application=None, closed=True)
-    return render_template("application-start.htm", contract=contract, profile=profile, application=application, closed=closed)
+        return render_template("application-start.htm", contract=contract, profile=profile, application=None, closed=True, clarification_requirements=[])
+    return render_template("application-start.htm", contract=contract, profile=profile, application=application, closed=closed, clarification_requirements=clarification_requirements)
 
 
 @app.post("/api/challenges/<challenge_id>/applications")
 def save_startup_application(challenge_id):
     if session.get("role") != "startup" or not session.get("business_id"):
         return jsonify({"ok": False, "message": "Startup authentication required."}), 401
-    challenge = _challenge_by_id(challenge_id)
+    challenge = _challenge_by_id(challenge_id, include_samples=True)
     if not challenge:
         return jsonify({"ok": False, "message": "Challenge not found."}), 404
     payload = request.get_json(silent=True) or {}
@@ -1400,11 +1978,1596 @@ def government_challenge_applications_api(challenge_id):
     if challenge.get("createdBy") != session.get("ministry_id"):
         return jsonify({"ok": False, "message": "You are not authorized to view applications for this challenge."}), 403
     try:
-        applications = list_challenge_applications(challenge_id)
+        applications = [_application_status_fields(item) for item in list_challenge_applications(challenge_id)]
         return jsonify({"ok": True, "count": len(applications), "applications": applications})
     except Exception:
         app.logger.exception("Could not load government applications for %s.", challenge_id)
         return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+
+
+@app.get("/government-dashboard/<challenge_id>/applications")
+@session_required("ministry")
+def government_challenge_applications_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to view applications for this challenge.", 403)
+    status_filter = request.args.get("status", "all")
+    allowed_filters = {"all", "submitted", "eligible", "ineligible", "clarification_requested"}
+    if status_filter not in allowed_filters:
+        status_filter = "all"
+    try:
+        applications = [_application_status_fields(item) for item in list_challenge_applications(challenge_id)]
+    except Exception:
+        app.logger.exception("Could not load applications for ministry challenge %s.", challenge_id)
+        return ("Applications are temporarily unavailable.", 503)
+    if status_filter == "eligible":
+        applications = [item for item in applications if item.get("eligibility_status") == "Eligible"]
+    elif status_filter == "ineligible":
+        applications = [item for item in applications if item.get("eligibility_status") == "Ineligible"]
+    elif status_filter == "clarification_requested":
+        applications = [item for item in applications if item.get("eligibility_status") == "Clarification Requested"]
+    elif status_filter == "submitted":
+        applications = [item for item in applications if item.get("status") == "submitted"]
+    return render_template(
+        "challenge-applications.htm",
+        challenge=challenge,
+        applications=applications,
+        status_filter=status_filter,
+    )
+
+
+@app.get("/government-dashboard/<challenge_id>/comparison")
+@session_required("ministry")
+def government_challenge_comparison_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to compare applications for this challenge.", 403)
+    try:
+        if get_challenge_final_selection(challenge_id):
+            return ("Final selection has already been confirmed for this challenge.", 409)
+        applications = list_challenge_evaluation_comparison(challenge_id)
+    except Exception:
+        app.logger.exception("Could not load evaluation comparison for challenge %s.", challenge_id)
+        return ("Evaluation comparison is temporarily unavailable.", 503)
+    return render_template("challenge-comparison.htm", challenge=challenge, applications=applications)
+
+
+def _prepare_final_selection(challenge, applications, selected_application_ids, reason, comments_by_application):
+    shortlisted = [item for item in applications if item.get("selection_status") == "shortlisted"]
+    shortlisted_ids = {item["application_id"] for item in shortlisted}
+    selected_ids = list(selected_application_ids)
+    selected_set = set(selected_ids)
+    if not selected_set:
+        raise ValueError("Select at least one shortlisted startup.")
+    if len(selected_set) != len(selected_ids) or not selected_set.issubset(shortlisted_ids):
+        raise ValueError("Only shortlisted applications can be selected, and each may be selected once.")
+    maximum = _maximum_selected_startups(challenge)
+    if maximum is not None and len(selected_set) > maximum:
+        raise ValueError(f"This challenge allows at most {maximum} selected startup(s).")
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValueError("Add a final government decision reason.")
+    if len(reason) > 4000:
+        raise ValueError("The final selection reason exceeds the 4,000 character limit.")
+    decisions = []
+    for item in shortlisted:
+        application_id = item["application_id"]
+        comment = str(comments_by_application.get(application_id) or "").strip()
+        if not comment:
+            raise ValueError("Add final selection comments for every shortlisted application.")
+        if len(comment) > 4000:
+            raise ValueError("A final selection comment exceeds the 4,000 character limit.")
+        decisions.append({
+            **item,
+            "final_decision": "selected" if application_id in selected_set else "not_selected",
+            "final_comment": comment,
+        })
+    return {"selected_ids": selected_set, "reason": reason, "decisions": decisions, "maximum": maximum}
+
+
+@app.get("/government-dashboard/<challenge_id>/final-selection")
+@session_required("ministry")
+def government_final_selection_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to select applications for this challenge.", 403)
+    try:
+        selection = get_challenge_final_selection(challenge_id)
+        applications = [] if selection else [
+            item for item in list_challenge_evaluation_comparison(challenge_id)
+            if item.get("selection_status") == "shortlisted"
+        ]
+        maximum = _maximum_selected_startups(challenge)
+    except ValueError as error:
+        return (str(error), 400)
+    except Exception:
+        app.logger.exception("Could not load shortlisted applications for challenge %s.", challenge_id)
+        return ("Final selection is temporarily unavailable.", 503)
+    return render_template(
+        "challenge-final-selection.htm",
+        challenge=challenge,
+        shortlisted=applications,
+        review=False,
+        confirmed=selection is not None,
+        selection=None,
+        final_selection=selection,
+        maximum_selected=maximum,
+    )
+
+
+@app.post("/government-dashboard/<challenge_id>/final-selection/review")
+@session_required("ministry")
+def review_government_final_selection(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to select applications for this challenge.", 403)
+    try:
+        applications = list_challenge_evaluation_comparison(challenge_id)
+        comments_by_application = {
+            item["application_id"]: request.form.get(f"comments_{item['application_id']}", "")
+            for item in applications
+        }
+        selection = _prepare_final_selection(
+            challenge,
+            applications,
+            request.form.getlist("selected_application_ids"),
+            request.form.get("reason"),
+            comments_by_application,
+        )
+    except ValueError as error:
+        return (str(error), 400)
+    except Exception:
+        app.logger.exception("Could not prepare final selection for challenge %s.", challenge_id)
+        return ("Final selection is temporarily unavailable.", 503)
+    return render_template(
+        "challenge-final-selection.htm",
+        challenge=challenge,
+        shortlisted=selection["decisions"],
+        review=True,
+        selection=selection,
+    )
+
+
+@app.post("/api/government/challenges/<challenge_id>/final-selection/confirm")
+def confirm_government_final_selection(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return jsonify({"ok": False, "message": "Challenge not found."}), 404
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return jsonify({"ok": False, "message": "You are not authorized to select applications for this challenge."}), 403
+    payload = request.get_json(silent=True) or {}
+    selected_ids = payload.get("selected_application_ids")
+    comments_by_application = payload.get("comments_by_application")
+    if not isinstance(selected_ids, list) or not isinstance(comments_by_application, dict):
+        return jsonify({"ok": False, "message": "Final selection data is invalid."}), 400
+    try:
+        if get_challenge_final_selection(challenge_id):
+            return jsonify({"ok": False, "message": "Final selection has already been confirmed for this challenge."}), 409
+        applications = list_challenge_evaluation_comparison(challenge_id)
+        selection = _prepare_final_selection(
+            challenge,
+            applications,
+            selected_ids,
+            payload.get("reason"),
+            comments_by_application,
+        )
+        outcomes = confirm_challenge_final_selection(
+            challenge_id,
+            list(selection["selected_ids"]),
+            session["ministry_id"],
+            "ministry",
+            selection["reason"],
+            comments_by_application,
+        )
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not confirm final selection for challenge %s.", challenge_id)
+        return jsonify({"ok": False, "message": "Final selection could not be confirmed."}), 503
+    if outcomes is None:
+        return jsonify({"ok": False, "message": "The shortlist changed or final selection was already confirmed. Reload and review again."}), 409
+    return jsonify({
+        "ok": True,
+        "message": "Final government selection confirmed.",
+        "selection_id": outcomes.get("selection_id"),
+        "applications": outcomes.get("applications", []),
+    })
+
+
+@app.get("/government-applications/<application_id>")
+@session_required("ministry")
+def government_application_detail(application_id):
+    try:
+        application = get_government_application(application_id)
+    except Exception:
+        app.logger.exception("Could not load ministry application %s.", application_id)
+        return ("Applications are temporarily unavailable.", 503)
+    if not application:
+        return ("Application not found", 404)
+    challenge = _challenge_by_id(application["challenge_id"])
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to view this application.", 403)
+    try:
+        profile = get_startup_profile(application["business_id"])
+        screening = get_application_screening(application_id)
+        evaluation = get_application_evaluation(application_id)
+        shortlist = get_application_shortlist_history(application_id)
+        final_selection = get_application_final_selection(application_id)
+    except Exception:
+        app.logger.exception("Could not load review details for application %s.", application_id)
+        return ("Application review is temporarily unavailable.", 503)
+    requirements = _eligibility_requirements(challenge)
+    saved_by_requirement = {item["requirement"]: item for item in screening["requirements"]}
+    requirements = [{"requirement": value, **saved_by_requirement.get(value, {})} for value in requirements]
+    try:
+        evaluation_criteria = evaluation["criteria"] if evaluation else _evaluation_criteria(challenge) if application.get("status") == "eligible" else []
+    except ValueError as error:
+        return (str(error), 400)
+    return render_template(
+        "government-application-detail.htm",
+        application=_application_status_fields(application),
+        challenge=challenge,
+        profile=profile,
+        requirements=requirements,
+        audit=screening["audit"],
+        evaluation=evaluation,
+        evaluation_criteria=evaluation_criteria,
+        shortlist=shortlist,
+        final_selection=final_selection,
+    )
+
+
+def _government_application_access(application_id):
+    application = get_government_application(application_id)
+    if not application:
+        return None, None, (jsonify({"ok": False, "message": "Application not found."}), 404)
+    challenge = _challenge_by_id(application["challenge_id"])
+    if not challenge:
+        return None, None, (jsonify({"ok": False, "message": "Challenge not found."}), 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return None, None, (jsonify({"ok": False, "message": "You are not authorized to view this application."}), 403)
+    return application, challenge, None
+
+
+@app.get("/api/government/applications/<application_id>")
+def government_application_api(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+    except Exception:
+        app.logger.exception("Could not load government application %s.", application_id)
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+    if access_error:
+        return access_error
+    try:
+        screening = get_application_screening(application_id)
+        evaluation = get_application_evaluation(application_id)
+        shortlist = get_application_shortlist_history(application_id)
+        final_selection = get_application_final_selection(application_id)
+    except Exception:
+        app.logger.exception("Could not load review history for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Application review is temporarily unavailable."}), 503
+    return jsonify({"ok": True, "application": _application_status_fields(application), "screening": screening, "evaluation": evaluation, "shortlist": shortlist, "final_selection": final_selection})
+
+
+@app.post("/api/government/applications/<application_id>/screening/start")
+def start_government_application_screening(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        started = start_application_screening(application_id, session["ministry_id"], "ministry")
+    except Exception:
+        app.logger.exception("Could not start screening for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Application screening is temporarily unavailable."}), 503
+    if not started:
+        return jsonify({"ok": False, "message": "This application is not available for screening."}), 409
+    return jsonify({"ok": True, "application_id": application["application_id"], "message": "Eligibility screening started."})
+
+
+@app.post("/api/government/applications/<application_id>/screening")
+def save_government_application_screening(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+    except Exception:
+        app.logger.exception("Could not load application %s for screening.", application_id)
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+    if application.get("status") != "submitted":
+        return jsonify({"ok": False, "message": "Only submitted applications can be screened."}), 409
+    payload = request.get_json(silent=True) or {}
+    raw_requirements = payload.get("requirements")
+    expected_requirements = _eligibility_requirements(challenge)
+    if not isinstance(raw_requirements, list) or not expected_requirements:
+        return jsonify({"ok": False, "message": "Eligibility requirements are required for screening."}), 400
+    if not raw_requirements:
+        return jsonify({"ok": False, "message": "Record at least one requirement decision before saving screening."}), 400
+    decisions = []
+    seen = set()
+    allowed_decisions = {"pass", "fail", "needs_clarification"}
+    for item in raw_requirements:
+        if not isinstance(item, dict):
+            return jsonify({"ok": False, "message": "Each screening result must be an object."}), 400
+        requirement = str(item.get("requirement") or "").strip()
+        decision = str(item.get("decision") or "").strip().lower()
+        comment = str(item.get("comment") or "").strip()
+        if requirement not in expected_requirements or requirement in seen:
+            return jsonify({"ok": False, "message": "A screening requirement is invalid or duplicated."}), 400
+        if decision not in allowed_decisions:
+            return jsonify({"ok": False, "message": "Choose Pass, Fail, or Needs Clarification for each requirement."}), 400
+        if len(comment) > 4000:
+            return jsonify({"ok": False, "message": "A reviewer comment exceeds the 4,000 character limit."}), 400
+        seen.add(requirement)
+        decisions.append({"requirement": requirement, "decision": decision, "comment": comment})
+
+    action = str(payload.get("action") or "save").strip().lower()
+    if action not in {"save", "eligible", "ineligible", "clarification_requested"}:
+        return jsonify({"ok": False, "message": "Choose Save, Eligible, Ineligible, or Request Clarification."}), 400
+    if action != "save":
+        if seen != set(expected_requirements):
+            return jsonify({"ok": False, "message": "Review every eligibility requirement before making a final decision."}), 400
+        outcomes = {item["decision"] for item in decisions}
+        if action == "eligible" and outcomes != {"pass"}:
+            return jsonify({"ok": False, "message": "Mark every requirement Pass before approving eligibility."}), 400
+        if action == "ineligible" and "fail" not in outcomes:
+            return jsonify({"ok": False, "message": "Mark at least one requirement Fail before rejecting eligibility."}), 400
+        if action == "clarification_requested" and "needs_clarification" not in outcomes:
+            return jsonify({"ok": False, "message": "Mark at least one requirement Needs Clarification."}), 400
+        if action == "clarification_requested" and any(
+            item["decision"] == "needs_clarification" and not item["comment"] for item in decisions
+        ):
+            return jsonify({"ok": False, "message": "Add a reviewer comment for each clarification request."}), 400
+        if action == "ineligible" and "needs_clarification" in outcomes:
+            return jsonify({"ok": False, "message": "Resolve clarification requirements before rejecting eligibility."}), 400
+    try:
+        save_application_screening(application_id, session["ministry_id"], "ministry", decisions)
+        if action != "save":
+            finalized = finalize_application_screening(
+                application_id,
+                session["ministry_id"],
+                "ministry",
+                action,
+                {"requirements_reviewed": len(decisions)},
+            )
+            if not finalized:
+                return jsonify({"ok": False, "message": "Application status changed; reload before deciding eligibility."}), 409
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 409
+    except Exception:
+        app.logger.exception("Could not save screening for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Screening could not be saved. Please try again."}), 503
+    return jsonify({"ok": True, "message": "Screening saved." if action == "save" else "Eligibility decision recorded."})
+
+
+@app.post("/api/government/applications/<application_id>/evaluation/start")
+def start_government_application_evaluation(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        if application.get("status") != "eligible":
+            return jsonify({"ok": False, "message": "Only eligible applications can start evaluation.", "status": application.get("status")}), 409
+        criteria = _evaluation_criteria(challenge)
+        started = start_application_evaluation(application_id, session["ministry_id"], "ministry", criteria)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not enter evaluation for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation status could not be updated."}), 503
+    if not started:
+        message = "Only eligible applications can enter evaluation."
+        return jsonify({"ok": False, "message": message, "status": application.get("status")}), 409
+    return jsonify({"ok": True, "message": "Evaluation started."})
+
+
+@app.post("/api/government/applications/<application_id>/evaluation")
+def save_government_application_evaluation(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        if application.get("status") != "under_evaluation":
+            return jsonify({"ok": False, "message": "Only applications under evaluation can be edited."}), 409
+        evaluation = get_application_evaluation(application_id)
+    except Exception:
+        app.logger.exception("Could not load evaluation %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation is temporarily unavailable."}), 503
+    if not evaluation or evaluation.get("status") != "in_progress":
+        return jsonify({"ok": False, "message": "No active evaluation scorecard exists."}), 409
+    raw_criteria = (request.get_json(silent=True) or {}).get("criteria")
+    if not isinstance(raw_criteria, list) or not raw_criteria:
+        return jsonify({"ok": False, "message": "Evaluation criteria are required."}), 400
+    expected = {item["criterion"]: item for item in evaluation["criteria"]}
+    seen = set()
+    scores = []
+    for item in raw_criteria:
+        if not isinstance(item, dict):
+            return jsonify({"ok": False, "message": "Each evaluation result must be an object."}), 400
+        name = str(item.get("criterion") or "").strip()
+        if name not in expected or name in seen:
+            return jsonify({"ok": False, "message": "An evaluation criterion is invalid or duplicated."}), 400
+        seen.add(name)
+        raw_score = item.get("score")
+        score = None if raw_score in (None, "") else raw_score
+        if score is not None:
+            try:
+                score = float(score)
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "message": f"Score for {name} must be a number."}), 400
+            if not math.isfinite(score) or score < 0 or score > expected[name]["maximum_score"]:
+                return jsonify({"ok": False, "message": f"Score for {name} must be between 0 and {expected[name]['maximum_score']}."}), 400
+        comment = str(item.get("comment") or "").strip()
+        if len(comment) > 4000:
+            return jsonify({"ok": False, "message": "An evaluation comment exceeds the 4,000 character limit."}), 400
+        scores.append({"criterion": name, "score": score, "comment": comment})
+    try:
+        totals = save_application_evaluation(application_id, session["ministry_id"], "ministry", scores)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not save evaluation for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation could not be saved."}), 503
+    return jsonify({"ok": True, "message": "Evaluation saved.", **totals})
+
+
+@app.post("/api/government/applications/<application_id>/evaluation/complete")
+def complete_government_application_evaluation(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+        if application.get("status") != "under_evaluation":
+            return jsonify({"ok": False, "message": "Only applications under evaluation can be completed."}), 409
+        totals = complete_application_evaluation(application_id, session["ministry_id"], "ministry")
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 409
+    except Exception:
+        app.logger.exception("Could not complete evaluation for application %s.", application_id)
+        return jsonify({"ok": False, "message": "Evaluation could not be completed."}), 503
+    return jsonify({"ok": True, "message": "Evaluation completed.", **totals})
+
+
+@app.post("/api/government/applications/<application_id>/shortlist")
+def decide_government_application_shortlist(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, _challenge, access_error = _government_application_access(application_id)
+        if access_error:
+            return access_error
+    except Exception:
+        app.logger.exception("Could not load application %s for shortlist decision.", application_id)
+        return jsonify({"ok": False, "message": "Application is temporarily unavailable."}), 503
+    if application.get("status") != "evaluation_complete":
+        return jsonify({"ok": False, "message": "Only applications with completed evaluation can be decided."}), 409
+    payload = request.get_json(silent=True) or {}
+    decision = str(payload.get("decision") or "").strip().lower()
+    if decision not in {"shortlisted", "not_selected"}:
+        return jsonify({"ok": False, "message": "Choose Shortlisted or Not Selected."}), 400
+    comments = str(payload.get("comments") or "").strip()
+    if not comments:
+        return jsonify({"ok": False, "message": "Add a reason for this shortlist decision."}), 400
+    if len(comments) > 4000:
+        return jsonify({"ok": False, "message": "The decision reason exceeds the 4,000 character limit."}), 400
+    try:
+        recorded = record_application_shortlist_decision(
+            application_id,
+            decision,
+            session["ministry_id"],
+            "ministry",
+            comments,
+        )
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not record shortlist decision for %s.", application_id)
+        return jsonify({"ok": False, "message": "The shortlist decision could not be saved."}), 503
+    if not recorded:
+        return jsonify({"ok": False, "message": "Only evaluation-complete applications can receive a shortlist decision."}), 409
+    return jsonify({"ok": True, "decision": decision, "message": "Shortlist decision recorded."})
+
+
+# --------------------------------------------------------------------------- #
+# Advanced evaluation: panel scoring, risk, QCBS ranking
+# --------------------------------------------------------------------------- #
+
+ADVANCED_EVALUATION_STATUSES = {"eligible", "under_evaluation", "evaluation_complete", "shortlisted", "not_selected", "selected"}
+
+
+def _read_advanced_store():
+    if not ADVANCED_EVALUATION_STORE_PATH.exists():
+        return {}
+    try:
+        with ADVANCED_EVALUATION_STORE_PATH.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _write_advanced_store(store):
+    temporary_path = ADVANCED_EVALUATION_STORE_PATH.with_suffix(".tmp")
+    with temporary_path.open("w", encoding="utf-8") as handle:
+        json.dump(store, handle, indent=2)
+    temporary_path.replace(ADVANCED_EVALUATION_STORE_PATH)
+
+
+def _advanced_challenge_record(store, challenge_id):
+    record = store.setdefault(challenge_id, {})
+    record.setdefault("config", dict(advanced_evaluation.DEFAULT_CONFIG))
+    record.setdefault("configHistory", [])
+    record.setdefault("applications", {})
+    return record
+
+
+def _advanced_application_record(challenge_record, application_id):
+    record = challenge_record["applications"].setdefault(application_id, {})
+    record.setdefault("panel", {})
+    record.setdefault("moderation", {})
+    record.setdefault("risk", None)
+    record.setdefault("financialQuote", None)
+    record.setdefault("history", [])
+    return record
+
+
+def _advanced_audit(record, event_type, details=None):
+    record["history"].append({
+        "event_type": event_type,
+        "actor": session.get("ministry_id"),
+        "at": _now_iso(),
+        "details": details or {},
+    })
+
+
+def _latest_bid_amount(challenge, business_id):
+    bids = [bid for bid in challenge.get("bids", []) if str(bid.get("startupId") or "") == str(business_id or "")]
+    if not bids:
+        return None
+    try:
+        return float(bids[-1].get("amount"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _application_quote(challenge, application, record):
+    if record.get("financialQuote") is not None:
+        return float(record["financialQuote"]), "Recorded financial proposal"
+    bid = _latest_bid_amount(challenge, application.get("business_id"))
+    if bid:
+        return bid, "Latest platform bid"
+    return None, None
+
+
+def _advanced_locked(challenge_id):
+    try:
+        return get_challenge_final_selection(challenge_id) is not None
+    except Exception:
+        app.logger.exception("Could not check final selection for %s.", challenge_id)
+        return True
+
+
+def _advanced_application_view(challenge, application, challenge_record):
+    config = challenge_record["config"]
+    record = _advanced_application_record(challenge_record, application["application_id"])
+    criteria = _evaluation_criteria(challenge)
+    pre = advanced_evaluation.pre_assessment(challenge, application.get("application_data") or {})
+    panel = advanced_evaluation.aggregate_panel(criteria, record["panel"].values(), config, record["moderation"])
+    risk = advanced_evaluation.risk_profile(record["risk"], config)
+    quote, quote_source = _application_quote(challenge, application, record)
+    return {
+        "config": config,
+        "criteria": criteria,
+        "pre_assessment": pre,
+        "panel": panel,
+        "scorecards": list(record["panel"].values()),
+        "risk": risk,
+        "risk_inputs": record["risk"] or advanced_evaluation.suggested_risks(pre),
+        "risk_is_suggested": record["risk"] is None,
+        "risk_dimensions": advanced_evaluation.RISK_DIMENSIONS,
+        "quote": quote,
+        "quote_source": quote_source,
+        "history": list(reversed(record["history"])),
+    }
+
+
+def _advanced_leaderboard(challenge, challenge_record):
+    config = challenge_record["config"]
+    applications = [
+        item for item in list_challenge_applications(challenge["challengeId"])
+        if item.get("status") in ADVANCED_EVALUATION_STATUSES
+    ]
+    entries = []
+    for application in applications:
+        view = _advanced_application_view(challenge, application, challenge_record)
+        entries.append({
+            "application_id": application["application_id"],
+            "startup_name": application.get("startup_name") or application.get("business_id") or "Startup",
+            "status": application.get("status"),
+            "technical_score": view["panel"]["technical_score"],
+            "panel_size": view["panel"]["panel_size"],
+            "confidence": view["panel"]["confidence"],
+            "divergent_criteria": view["panel"]["divergent_criteria"],
+            "quote": view["quote"],
+            "risk_penalty_pct": view["risk"]["penalty_pct"],
+            "risk_level": view["risk"]["level"],
+            "pre_assessment_indicator": view["pre_assessment"]["indicator"],
+            "pre_assessment_band": view["pre_assessment"]["band"],
+        })
+    try:
+        maximum = _maximum_selected_startups(challenge)
+    except ValueError:
+        maximum = None
+    return advanced_evaluation.rank_applications(entries, config, maximum), maximum
+
+
+def _owned_challenge_or_error(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return None, (jsonify({"ok": False, "message": "Challenge not found."}), 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return None, (jsonify({"ok": False, "message": "You are not authorized to evaluate this challenge."}), 403)
+    return challenge, None
+
+
+def _advanced_write_context(application_id):
+    """Shared checks for every advanced-evaluation write on one application."""
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return None, None, auth_error
+    try:
+        application, challenge, access_error = _government_application_access(application_id)
+    except Exception:
+        app.logger.exception("Could not load application %s for advanced evaluation.", application_id)
+        return None, None, (jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503)
+    if access_error:
+        return None, None, access_error
+    if application.get("status") not in ADVANCED_EVALUATION_STATUSES:
+        return None, None, (jsonify({"ok": False, "message": "Only eligible applications can receive advanced evaluation."}), 409)
+    if _advanced_locked(challenge["challengeId"]):
+        return None, None, (jsonify({"ok": False, "message": "Final selection is confirmed; advanced evaluation is locked."}), 409)
+    return application, challenge, None
+
+
+@app.get("/government-dashboard/<challenge_id>/advanced-evaluation")
+@session_required("ministry")
+def government_advanced_evaluation_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to evaluate this challenge.", 403)
+    store = _read_advanced_store()
+    challenge_record = _advanced_challenge_record(store, challenge_id)
+    try:
+        leaderboard, maximum = _advanced_leaderboard(challenge, challenge_record)
+    except ValueError as error:
+        return (str(error), 400)
+    except Exception:
+        app.logger.exception("Could not build advanced leaderboard for %s.", challenge_id)
+        return ("Advanced evaluation is temporarily unavailable.", 503)
+    return render_template(
+        "advanced-evaluation.htm",
+        challenge=challenge,
+        leaderboard=leaderboard,
+        config=challenge_record["config"],
+        config_history=list(reversed(challenge_record["configHistory"])),
+        aggregation_methods=advanced_evaluation.AGGREGATION_METHODS,
+        maximum_selected=maximum,
+        locked=_advanced_locked(challenge_id),
+    )
+
+
+@app.get("/api/government/challenges/<challenge_id>/advanced-evaluation")
+def government_advanced_evaluation_api(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge, error = _owned_challenge_or_error(challenge_id)
+    if error:
+        return error
+    store = _read_advanced_store()
+    challenge_record = _advanced_challenge_record(store, challenge_id)
+    try:
+        leaderboard, maximum = _advanced_leaderboard(challenge, challenge_record)
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    except Exception:
+        app.logger.exception("Could not build advanced leaderboard for %s.", challenge_id)
+        return jsonify({"ok": False, "message": "Advanced evaluation is temporarily unavailable."}), 503
+    return jsonify({"ok": True, "config": challenge_record["config"], "maximum_selected": maximum, **leaderboard})
+
+
+@app.post("/api/government/challenges/<challenge_id>/advanced-evaluation/config")
+def save_advanced_evaluation_config(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge, error = _owned_challenge_or_error(challenge_id)
+    if error:
+        return error
+    if _advanced_locked(challenge_id):
+        return jsonify({"ok": False, "message": "Final selection is confirmed; advanced evaluation is locked."}), 409
+    payload = request.get_json(silent=True) or {}
+    reason = str(payload.get("reason") or "").strip()
+    try:
+        config = advanced_evaluation.normalize_config(payload.get("config"))
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    store = _read_advanced_store()
+    record = _advanced_challenge_record(store, challenge_id)
+    scored = any(item.get("panel") for item in record["applications"].values())
+    if scored and config != record["config"] and not reason:
+        return jsonify({"ok": False, "message": "Panel scoring has started. Record a reason for changing the evaluation rules."}), 400
+    if len(reason) > 2000:
+        return jsonify({"ok": False, "message": "Reason must be under 2,000 characters."}), 400
+    record["configHistory"].append({"previous": record["config"], "updated": config, "reason": reason, "actor": session.get("ministry_id"), "at": _now_iso()})
+    record["config"] = config
+    _write_advanced_store(store)
+    return jsonify({"ok": True, "config": config, "message": "Evaluation rules saved."})
+
+
+@app.get("/government-applications/<application_id>/advanced-evaluation")
+@session_required("ministry")
+def government_application_advanced_page(application_id):
+    try:
+        application = get_government_application(application_id)
+    except Exception:
+        app.logger.exception("Could not load application %s.", application_id)
+        return ("Applications are temporarily unavailable.", 503)
+    if not application:
+        return ("Application not found", 404)
+    challenge = _challenge_by_id(application["challenge_id"])
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to view this application.", 403)
+    store = _read_advanced_store()
+    challenge_record = _advanced_challenge_record(store, challenge["challengeId"])
+    try:
+        view = _advanced_application_view(challenge, application, challenge_record)
+    except ValueError as error:
+        return (str(error), 400)
+    return render_template(
+        "advanced-application-evaluation.htm",
+        application=_application_status_fields(application),
+        challenge=challenge,
+        view=view,
+        can_score=application.get("status") in ADVANCED_EVALUATION_STATUSES,
+        locked=_advanced_locked(challenge["challengeId"]),
+    )
+
+
+@app.get("/api/government/applications/<application_id>/advanced-evaluation")
+def government_application_advanced_api(application_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    try:
+        application, challenge, access_error = _government_application_access(application_id)
+    except Exception:
+        app.logger.exception("Could not load application %s.", application_id)
+        return jsonify({"ok": False, "message": "Applications are temporarily unavailable."}), 503
+    if access_error:
+        return access_error
+    store = _read_advanced_store()
+    try:
+        view = _advanced_application_view(challenge, application, _advanced_challenge_record(store, challenge["challengeId"]))
+    except ValueError as error:
+        return jsonify({"ok": False, "message": str(error)}), 400
+    view["risk_dimensions"] = [{"key": key, "label": label} for key, label in view["risk_dimensions"]]
+    return jsonify({"ok": True, "application_id": application_id, **view})
+
+
+@app.post("/api/government/applications/<application_id>/advanced-evaluation/panel")
+def save_advanced_panel_scorecard(application_id):
+    application, challenge, error = _advanced_write_context(application_id)
+    if error:
+        return error
+    try:
+        criteria = _evaluation_criteria(challenge)
+        card = advanced_evaluation.validate_scorecard(criteria, request.get_json(silent=True) or {})
+    except ValueError as validation_error:
+        return jsonify({"ok": False, "message": str(validation_error)}), 400
+    store = _read_advanced_store()
+    challenge_record = _advanced_challenge_record(store, challenge["challengeId"])
+    record = _advanced_application_record(challenge_record, application_id)
+    existing = record["panel"].get(card["panelistId"])
+    card["submittedAt"] = _now_iso()
+    card["recordedBy"] = session.get("ministry_id")
+    card["version"] = (existing or {}).get("version", 0) + 1
+    record["panel"][card["panelistId"]] = card
+    _advanced_audit(record, "panel_recusal" if card["recused"] else "panel_scorecard_updated" if existing else "panel_scorecard_submitted", {
+        "panelist": card["panelistName"], "version": card["version"],
+    })
+    _write_advanced_store(store)
+    view = _advanced_application_view(challenge, application, challenge_record)
+    message = f"{card['panelistName']} recused due to a declared conflict." if card["recused"] else f"Scorecard from {card['panelistName']} recorded."
+    return jsonify({"ok": True, "message": message, "panel": view["panel"]})
+
+
+@app.post("/api/government/applications/<application_id>/advanced-evaluation/moderation")
+def save_advanced_moderation(application_id):
+    application, challenge, error = _advanced_write_context(application_id)
+    if error:
+        return error
+    store = _read_advanced_store()
+    challenge_record = _advanced_challenge_record(store, challenge["challengeId"])
+    record = _advanced_application_record(challenge_record, application_id)
+    try:
+        criteria = _evaluation_criteria(challenge)
+        moderation = advanced_evaluation.validate_moderation(criteria, request.get_json(silent=True) or {})
+    except ValueError as validation_error:
+        return jsonify({"ok": False, "message": str(validation_error)}), 400
+    panel = advanced_evaluation.aggregate_panel(criteria, record["panel"].values(), challenge_record["config"], record["moderation"])
+    row = next(item for item in panel["criteria"] if item["criterion"] == moderation["criterion"])
+    if row["panel_size"] < 2:
+        return jsonify({"ok": False, "message": "Moderation needs at least two panel scores for this criterion."}), 409
+    if not row["min"] <= moderation["score"] <= row["max"]:
+        return jsonify({"ok": False, "message": f"A consensus score must sit within the panel's range ({row['min']:g} to {row['max']:g})."}), 400
+    record["moderation"][moderation["criterion"]] = {"score": moderation["score"], "note": moderation["note"], "by": session.get("ministry_id"), "at": _now_iso()}
+    _advanced_audit(record, "criterion_moderated", moderation)
+    _write_advanced_store(store)
+    view = _advanced_application_view(challenge, application, challenge_record)
+    return jsonify({"ok": True, "message": f"Consensus score recorded for {moderation['criterion']}.", "panel": view["panel"]})
+
+
+@app.post("/api/government/applications/<application_id>/advanced-evaluation/risk")
+def save_advanced_risk(application_id):
+    application, challenge, error = _advanced_write_context(application_id)
+    if error:
+        return error
+    try:
+        risks = advanced_evaluation.validate_risk(request.get_json(silent=True) or {})
+    except ValueError as validation_error:
+        return jsonify({"ok": False, "message": str(validation_error)}), 400
+    store = _read_advanced_store()
+    challenge_record = _advanced_challenge_record(store, challenge["challengeId"])
+    record = _advanced_application_record(challenge_record, application_id)
+    record["risk"] = risks
+    profile = advanced_evaluation.risk_profile(risks, challenge_record["config"])
+    _advanced_audit(record, "risk_assessed", {"index": profile["index"], "level": profile["level"]})
+    _write_advanced_store(store)
+    return jsonify({"ok": True, "message": "Risk assessment saved.", "risk": profile})
+
+
+@app.post("/api/government/applications/<application_id>/advanced-evaluation/financial")
+def save_advanced_financial_quote(application_id):
+    application, challenge, error = _advanced_write_context(application_id)
+    if error:
+        return error
+    payload = request.get_json(silent=True) or {}
+    try:
+        amount = float(payload.get("amount"))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "message": "Enter the financial proposal amount in rupees."}), 400
+    if not math.isfinite(amount) or amount <= 0:
+        return jsonify({"ok": False, "message": "Financial proposal must be a positive amount."}), 400
+    source = str(payload.get("source") or "").strip()
+    if not source:
+        return jsonify({"ok": False, "message": "Note where this amount comes from (for example, the sealed financial bid)."}), 400
+    store = _read_advanced_store()
+    challenge_record = _advanced_challenge_record(store, challenge["challengeId"])
+    record = _advanced_application_record(challenge_record, application_id)
+    record["financialQuote"] = round(amount, 2)
+    _advanced_audit(record, "financial_proposal_recorded", {"amount": round(amount, 2), "source": source[:500]})
+    _write_advanced_store(store)
+    return jsonify({"ok": True, "message": "Financial proposal recorded.", "amount": round(amount, 2)})
+
+
+# --------------------------------------------------------------------------- #
+# Sandbox / pilot programmes for startups confirmed in final selection
+# --------------------------------------------------------------------------- #
+
+PILOT_LIVE_STAGES = {"active", "suspended", "review"}
+
+
+def _today():
+    return datetime.utcnow().date()
+
+
+def _read_pilot_store():
+    if not PILOT_STORE_PATH.exists():
+        return {}
+    try:
+        with PILOT_STORE_PATH.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _write_pilot_store(store):
+    temporary_path = PILOT_STORE_PATH.with_suffix(".tmp")
+    with temporary_path.open("w", encoding="utf-8") as handle:
+        json.dump(store, handle, indent=2)
+    temporary_path.replace(PILOT_STORE_PATH)
+
+
+def _pilot_event(pilot, event_type, role, details=None):
+    actor = session.get("ministry_id") if role == "ministry" else session.get("business_id")
+    pilot.setdefault("history", []).append({"event_type": event_type, "actor": actor, "role": role, "at": _now_iso(), "details": details or {}})
+    pilot["updatedAt"] = _now_iso()
+
+
+def _selected_applications(challenge_id):
+    selection = get_challenge_final_selection(challenge_id)
+    if not selection:
+        return None
+    return [item for item in selection.get("applications", []) if item.get("decision") == "selected"]
+
+
+def _default_pilot_agreement(challenge):
+    start = _today() + timedelta(days=14)
+    end = start + timedelta(days=90)
+    return {
+        "mode": "Pilot",
+        "scope": ((challenge.get("problemStatement") or {}).get("description") or "")[:4000],
+        "sites": "",
+        "cohortSize": 0,
+        "startDate": start.isoformat(),
+        "endDate": end.isoformat(),
+        "reportingCadence": "Biweekly",
+        "budget": 0,
+        "kpis": [{"kpiId": "KPI-1", "name": "", "unit": "", "baseline": "", "target": "", "direction": "increase", "weight": 100, "critical": True, "guardrail": "", "method": ""}],
+        "milestones": [
+            {"milestoneId": "MS-1", "title": "Onboarding and baseline measurement", "dueDate": (start + timedelta(days=21)).isoformat(), "deliverables": "Solution deployed in the agreed environment; baseline values recorded for every KPI.", "paymentPct": 30},
+            {"milestoneId": "MS-2", "title": "Mid-pilot performance review", "dueDate": (start + timedelta(days=55)).isoformat(), "deliverables": "Interim KPI report with evidence; issues log and fixes.", "paymentPct": 40},
+            {"milestoneId": "MS-3", "title": "Final results and handover", "dueDate": end.isoformat(), "deliverables": "Final KPI report, user feedback summary, documentation and data handover.", "paymentPct": 30},
+        ],
+        "dataResponsibilities": "",
+        "ipOwnership": "",
+        "securityRequirements": "",
+        "exitCriteria": "",
+        "riskResponsibilities": "",
+    }
+
+
+def _pilot_view(pilot):
+    today = _today()
+    view = {
+        "stage_label": pilot_engine.STAGE_LABELS[pilot["stage"]],
+        "is_terminal": pilot["stage"] in pilot_engine.TERMINAL_STAGES,
+        "health": None,
+        "scorecard": None,
+        "review_due": False,
+    }
+    agreement = pilot.get("agreement")
+    if agreement:
+        mode = agreement["mode"]
+        view["readiness_items"] = [
+            {**item, **(pilot.get("readiness", {}).get(item["key"]) or {})} for item in pilot_engine.readiness_items(mode)
+        ]
+        view["readiness_outstanding"] = pilot_engine.readiness_complete(mode, pilot.get("readiness", {}))
+        view["milestones"] = pilot_engine.milestone_view(agreement, pilot.get("milestoneStates", {}), today)
+        view["kpis_by_id"] = {item["kpiId"]: item for item in agreement["kpis"]}
+        if pilot["stage"] in PILOT_LIVE_STAGES or (view["is_terminal"] and pilot.get("wentLiveAt")):
+            view["scorecard"] = pilot_engine.results_scorecard(pilot, today)
+            view["health"] = view["scorecard"]["health"]
+            view["review_due"] = pilot["stage"] == "active" and today >= pilot_engine.parse_date(agreement["endDate"], "End date")
+    return view
+
+
+def _load_ministry_pilot(pilot_id):
+    """Return (store, pilot, challenge, error_response) for the signed-in ministry user."""
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return None, None, None, auth_error
+    store = _read_pilot_store()
+    pilot = store.get(pilot_id)
+    if not pilot:
+        return None, None, None, (jsonify({"ok": False, "message": "Pilot not found."}), 404)
+    challenge = _challenge_by_id(pilot["challengeId"])
+    if not challenge or challenge.get("createdBy") != session.get("ministry_id"):
+        return None, None, None, (jsonify({"ok": False, "message": "You are not authorized to manage this pilot."}), 403)
+    return store, pilot, challenge, None
+
+
+def _load_startup_pilot(pilot_id):
+    if session.get("role") != "startup" or not session.get("business_id"):
+        return None, None, (jsonify({"ok": False, "message": "Startup authentication required."}), 401)
+    store = _read_pilot_store()
+    pilot = store.get(pilot_id)
+    if not pilot or pilot.get("businessId") != session.get("business_id") or pilot["stage"] == "draft" and not pilot.get("agreementVersion"):
+        return None, None, (jsonify({"ok": False, "message": "Pilot not found."}), 404)
+    return store, pilot, None
+
+
+def _stage_error(pilot, allowed, action):
+    if pilot["stage"] not in allowed:
+        label = pilot_engine.STAGE_LABELS[pilot["stage"]].lower()
+        return jsonify({"ok": False, "message": f"You can't {action} while the pilot is at the '{label}' stage."}), 409
+    return None
+
+
+def _pilot_saved(store, pilot, message, status=200):
+    store[pilot["pilotId"]] = pilot
+    _write_pilot_store(store)
+    return jsonify({"ok": True, "message": message, "stage": pilot["stage"]}), status
+
+
+def _owned_challenges():
+    """Challenges created by the signed-in ministry officer."""
+    return [item for item in _serialize_challenges() if item.get("createdBy") == session.get("ministry_id")]
+
+
+def _ministry_programme_rows(today):
+    """Every sandbox/pilot on the officer's challenges, with health and attention summary."""
+    owned = {item.get("challengeId"): item for item in _owned_challenges()}
+    rows = []
+    for pilot in _read_pilot_store().values():
+        challenge = owned.get(pilot.get("challengeId"))
+        if not challenge:
+            continue
+        row = next(iter(pilot_engine.cohort_comparison([pilot], today)))
+        agreement = pilot.get("agreement") or {}
+        readiness_total = len(pilot_engine.readiness_items(agreement["mode"])) if agreement else 0
+        row.update({
+            "challengeId": pilot["challengeId"],
+            "challengeTitle": challenge.get("title"),
+            "attention": pilot_engine.programme_attention(pilot, today),
+            "sites": agreement.get("sites") or (pilot.get("agreementDraft") or {}).get("sites") or "",
+            "startDate": agreement.get("startDate"),
+            "endDate": agreement.get("endDate"),
+            "readiness_done": readiness_total - len(pilot_engine.readiness_complete(agreement["mode"], pilot.get("readiness", {}))) if agreement else 0,
+            "readiness_total": readiness_total,
+        })
+        rows.append(row)
+    return rows
+
+
+def _selected_without_programme(existing_application_ids):
+    """Startups confirmed in final selection that do not have a sandbox or pilot yet."""
+    waiting = []
+    for challenge in _owned_challenges():
+        try:
+            selected = _selected_applications(challenge["challengeId"]) or []
+        except Exception:
+            app.logger.exception("Could not load final selection for %s.", challenge["challengeId"])
+            continue
+        for item in selected:
+            if item.get("application_id") not in existing_application_ids:
+                waiting.append({**item, "challengeId": challenge["challengeId"], "challengeTitle": challenge.get("title")})
+    return waiting
+
+
+PROGRAMME_PAGES = {
+    "Sandbox": {
+        "title": "Sandbox",
+        "heading": "Sandbox programmes",
+        "subtitle": "Controlled test environments where a selected startup's solution is tried on test data or a closed user group before any real citizen is exposed to it.",
+        "noun": "sandbox",
+    },
+    "Pilot": {
+        "title": "Pilots",
+        "heading": "Pilot programmes",
+        "subtitle": "Limited live rollouts with real users in agreed sites, measured against KPIs before the government decides to scale, extend or close.",
+        "noun": "pilot",
+    },
+}
+
+
+def _render_programme_page(mode):
+    today = _today()
+    all_rows = _ministry_programme_rows(today)
+    rows = [row for row in all_rows if row["attention"]["mode"] == mode]
+    order = {"active": 0, "suspended": 1, "review": 2, "readiness": 3, "awaiting_acceptance": 4, "draft": 5}
+    rows.sort(key=lambda row: (order.get(row["stage"], 9), -row["attention"]["urgent"]))
+    stages = {
+        "setup": sum(1 for row in rows if row["stage"] in {"draft", "awaiting_acceptance", "readiness"}),
+        "running": sum(1 for row in rows if row["stage"] in {"active", "suspended"}),
+        "review": sum(1 for row in rows if row["stage"] == "review"),
+        "completed": sum(1 for row in rows if row["stage"] in pilot_engine.TERMINAL_STAGES),
+    }
+    waiting = _selected_without_programme({pilot.get("applicationId") for pilot in _read_pilot_store().values()})
+    return render_template(
+        "programmes.htm",
+        mode=mode,
+        page=PROGRAMME_PAGES[mode],
+        rows=rows,
+        stages=stages,
+        waiting=waiting,
+    )
+
+
+@app.get("/sandbox")
+@session_required("ministry")
+def ministry_sandbox_page():
+    return _render_programme_page("Sandbox")
+
+
+@app.get("/pilots")
+@session_required("ministry")
+def ministry_pilots_page():
+    return _render_programme_page("Pilot")
+
+
+@app.get("/government-dashboard/<challenge_id>/pilots")
+@session_required("ministry")
+def government_challenge_pilots_page(challenge_id):
+    challenge = _challenge_by_id(challenge_id)
+    if not challenge:
+        return ("Challenge not found", 404)
+    if challenge.get("isSample") or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to manage pilots for this challenge.", 403)
+    try:
+        selected = _selected_applications(challenge_id)
+    except Exception:
+        app.logger.exception("Could not load final selection for %s.", challenge_id)
+        return ("Pilot programmes are temporarily unavailable.", 503)
+    store = _read_pilot_store()
+    pilots = [item for item in store.values() if item.get("challengeId") == challenge_id]
+    pilots_by_application = {item["applicationId"]: item for item in pilots}
+    return render_template(
+        "challenge-pilots.htm",
+        challenge=challenge,
+        selected=selected,
+        pilots_by_application=pilots_by_application,
+        cohort=pilot_engine.cohort_comparison(pilots, _today()),
+        stage_labels=pilot_engine.STAGE_LABELS,
+    )
+
+
+@app.post("/api/government/challenges/<challenge_id>/pilots")
+def create_challenge_pilot(challenge_id):
+    auth_error = ministry_api_required()
+    if auth_error is not None:
+        return auth_error
+    challenge, error = _owned_challenge_or_error(challenge_id)
+    if error:
+        return error
+    payload = request.get_json(silent=True) or {}
+    application_id = str(payload.get("applicationId") or "").strip()
+    mode = str(payload.get("mode") or "Pilot").strip()
+    if mode not in pilot_engine.MODES:
+        return jsonify({"ok": False, "message": "Choose Sandbox or Pilot."}), 400
+    try:
+        selected = _selected_applications(challenge_id)
+    except Exception:
+        app.logger.exception("Could not load final selection for %s.", challenge_id)
+        return jsonify({"ok": False, "message": "Final selection is temporarily unavailable."}), 503
+    if selected is None:
+        return jsonify({"ok": False, "message": "Confirm the final selection before setting up pilots."}), 409
+    application = next((item for item in selected if item.get("application_id") == application_id), None)
+    if not application:
+        return jsonify({"ok": False, "message": "Only startups selected in the final selection can start a pilot."}), 400
+    store = _read_pilot_store()
+    pilot_id = f"PLT-{application_id}"
+    if pilot_id in store:
+        return jsonify({"ok": False, "message": "A pilot already exists for this startup.", "pilotId": pilot_id}), 409
+    pilot = {
+        "pilotId": pilot_id,
+        "challengeId": challenge_id,
+        "challengeTitle": challenge.get("title"),
+        "applicationId": application_id,
+        "businessId": application.get("business_id"),
+        "startupName": application.get("startup_name") or application.get("business_id"),
+        "stage": "draft",
+        "agreementVersion": 0,
+        "agreementDraft": {**_default_pilot_agreement(challenge), "mode": mode},
+        "agreement": None,
+        "agreementHistory": [],
+        "changeRequests": [],
+        "acceptance": None,
+        "readiness": {},
+        "reports": [],
+        "measurements": [],
+        "milestoneStates": {},
+        "incidents": [],
+        "payments": [],
+        "decisions": [],
+        "history": [],
+        "createdAt": _now_iso(),
+    }
+    _pilot_event(pilot, "pilot_created", "ministry", {"applicationId": application_id})
+    store[pilot_id] = pilot
+    _write_pilot_store(store)
+    return jsonify({"ok": True, "pilotId": pilot_id, "message": f"{mode} created. Draft the agreement next."}), 201
+
+
+@app.get("/government-pilots/<pilot_id>")
+@session_required("ministry")
+def government_pilot_page(pilot_id):
+    pilot = _read_pilot_store().get(pilot_id)
+    if not pilot:
+        return ("Pilot not found", 404)
+    challenge = _challenge_by_id(pilot["challengeId"])
+    if not challenge or challenge.get("createdBy") != session.get("ministry_id"):
+        return ("You are not authorized to manage this pilot.", 403)
+    return render_template(
+        "pilot-workspace.htm",
+        pilot=pilot,
+        challenge=challenge,
+        view=_pilot_view(pilot),
+        decisions=pilot_engine.DECISIONS,
+        severities=pilot_engine.INCIDENT_SEVERITIES,
+        today=_today().isoformat(),
+    )
+
+
+@app.get("/api/government/pilots/<pilot_id>")
+def government_pilot_api(pilot_id):
+    _store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    view = _pilot_view(pilot)
+    return jsonify({"ok": True, "pilot": pilot, "health": view["health"], "scorecard": view["scorecard"], "stage_label": view["stage_label"]})
+
+
+@app.post("/api/government/pilots/<pilot_id>/agreement")
+def save_pilot_agreement_draft(pilot_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, {"draft"}, "edit the agreement")
+    if error:
+        return error
+    draft = (request.get_json(silent=True) or {}).get("agreement")
+    if not isinstance(draft, dict):
+        return jsonify({"ok": False, "message": "Agreement data is invalid."}), 400
+    if len(json.dumps(draft)) > 200_000:
+        return jsonify({"ok": False, "message": "Agreement is too large."}), 400
+    pilot["agreementDraft"] = draft
+    _pilot_event(pilot, "agreement_draft_saved", "ministry")
+    return _pilot_saved(store, pilot, "Draft saved.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/agreement/send")
+def send_pilot_agreement(pilot_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, {"draft"}, "send the agreement")
+    if error:
+        return error
+    draft = (request.get_json(silent=True) or {}).get("agreement") or pilot.get("agreementDraft")
+    try:
+        agreement = pilot_engine.validate_agreement(draft)
+    except ValueError as validation_error:
+        return jsonify({"ok": False, "message": str(validation_error)}), 400
+    pilot["agreementDraft"] = draft
+    pilot["agreement"] = agreement
+    pilot["agreementVersion"] += 1
+    pilot["agreementHistory"].append({"version": pilot["agreementVersion"], "sentAt": _now_iso(), "agreement": agreement})
+    pilot["stage"] = "awaiting_acceptance"
+    _pilot_event(pilot, "agreement_sent", "ministry", {"version": pilot["agreementVersion"]})
+    return _pilot_saved(store, pilot, f"Agreement version {pilot['agreementVersion']} sent to the startup.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/readiness")
+def update_pilot_readiness(pilot_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, {"readiness"}, "update readiness checks")
+    if error:
+        return error
+    payload = request.get_json(silent=True) or {}
+    key = str(payload.get("item") or "")
+    if key not in {item["key"] for item in pilot_engine.readiness_items(pilot["agreement"]["mode"])}:
+        return jsonify({"ok": False, "message": "Unknown readiness item."}), 400
+    done = bool(payload.get("done"))
+    evidence = str(payload.get("evidence") or "").strip()
+    if done and not evidence:
+        return jsonify({"ok": False, "message": "Record the evidence for this readiness check (document, reference or date)."}), 400
+    if len(evidence) > 2000:
+        return jsonify({"ok": False, "message": "Evidence must be under 2,000 characters."}), 400
+    pilot["readiness"][key] = {"done": done, "evidence": evidence, "by": session.get("ministry_id"), "at": _now_iso()}
+    _pilot_event(pilot, "readiness_updated", "ministry", {"item": key, "done": done})
+    return _pilot_saved(store, pilot, "Readiness check updated.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/go-live")
+def pilot_go_live(pilot_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, {"readiness"}, "go live")
+    if error:
+        return error
+    outstanding = pilot_engine.readiness_complete(pilot["agreement"]["mode"], pilot["readiness"])
+    if outstanding:
+        return jsonify({"ok": False, "message": "Complete every readiness check first: " + "; ".join(outstanding)}), 409
+    pilot["stage"] = "active"
+    pilot["wentLiveAt"] = _now_iso()
+    _pilot_event(pilot, "went_live", "ministry")
+    return _pilot_saved(store, pilot, f"{pilot['agreement']['mode']} is live. The startup can now submit progress reports.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/measurements/<measurement_id>")
+def verify_pilot_measurement(pilot_id, measurement_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, PILOT_LIVE_STAGES, "verify measurements")
+    if error:
+        return error
+    measurement = next((item for item in pilot["measurements"] if item["measurementId"] == measurement_id), None)
+    if not measurement:
+        return jsonify({"ok": False, "message": "Measurement not found."}), 404
+    if measurement["status"] != "pending":
+        return jsonify({"ok": False, "message": "This measurement has already been reviewed."}), 409
+    payload = request.get_json(silent=True) or {}
+    decision = str(payload.get("decision") or "")
+    note = str(payload.get("note") or "").strip()[:2000]
+    if decision not in {"verified", "rejected"}:
+        return jsonify({"ok": False, "message": "Choose Verify or Reject."}), 400
+    if decision == "rejected" and not note:
+        return jsonify({"ok": False, "message": "Explain why the measurement is rejected so the startup can correct it."}), 400
+    measurement.update({"status": decision, "note": note, "reviewedBy": session.get("ministry_id"), "reviewedAt": _now_iso()})
+    _pilot_event(pilot, f"measurement_{decision}", "ministry", {"measurementId": measurement_id, "kpiId": measurement["kpiId"]})
+    return _pilot_saved(store, pilot, f"Measurement {decision}.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/milestones/<milestone_id>/verify")
+def verify_pilot_milestone(pilot_id, milestone_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, PILOT_LIVE_STAGES, "verify milestones")
+    if error:
+        return error
+    state = pilot["milestoneStates"].get(milestone_id)
+    if not state or state.get("status") != "claimed":
+        return jsonify({"ok": False, "message": "Only milestones the startup has claimed as complete can be verified."}), 409
+    payload = request.get_json(silent=True) or {}
+    decision = str(payload.get("decision") or "")
+    note = str(payload.get("note") or "").strip()[:2000]
+    if decision not in {"verified", "rejected"}:
+        return jsonify({"ok": False, "message": "Choose Verify or Reject."}), 400
+    if decision == "rejected" and not note:
+        return jsonify({"ok": False, "message": "Explain what is missing so the startup can resubmit."}), 400
+    state.update({"status": decision, "note": note, "verifiedBy": session.get("ministry_id"), ("verifiedAt" if decision == "verified" else "rejectedAt"): _now_iso()})
+    _pilot_event(pilot, f"milestone_{decision}", "ministry", {"milestoneId": milestone_id})
+    return _pilot_saved(store, pilot, f"Milestone {decision}.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/milestones/<milestone_id>/payment")
+def release_pilot_payment(pilot_id, milestone_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, PILOT_LIVE_STAGES, "release payments")
+    if error:
+        return error
+    milestone = next((item for item in pilot["agreement"]["milestones"] if item["milestoneId"] == milestone_id), None)
+    if not milestone:
+        return jsonify({"ok": False, "message": "Milestone not found."}), 404
+    if (pilot["milestoneStates"].get(milestone_id) or {}).get("status") != "verified":
+        return jsonify({"ok": False, "message": "Payment can only be released after the milestone is verified."}), 409
+    if any(item["milestoneId"] == milestone_id for item in pilot["payments"]):
+        return jsonify({"ok": False, "message": "Payment for this milestone has already been released."}), 409
+    amount = round(pilot["agreement"]["budget"] * milestone["paymentPct"] / 100, 2)
+    if amount <= 0:
+        return jsonify({"ok": False, "message": "This milestone has no payment attached."}), 400
+    reference = str((request.get_json(silent=True) or {}).get("reference") or "").strip()
+    if not reference or len(reference) > 200:
+        return jsonify({"ok": False, "message": "Enter the payment or sanction order reference."}), 400
+    pilot["payments"].append({"milestoneId": milestone_id, "amount": amount, "reference": reference, "releasedBy": session.get("ministry_id"), "releasedAt": _now_iso()})
+    _pilot_event(pilot, "payment_released", "ministry", {"milestoneId": milestone_id, "amount": amount})
+    return _pilot_saved(store, pilot, f"₹{amount:,.2f} released for {milestone['title']}.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/incidents/<incident_id>/resolve")
+def resolve_pilot_incident(pilot_id, incident_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    incident = next((item for item in pilot["incidents"] if item["incidentId"] == incident_id), None)
+    if not incident:
+        return jsonify({"ok": False, "message": "Incident not found."}), 404
+    if incident["status"] != "open":
+        return jsonify({"ok": False, "message": "This incident is already resolved."}), 409
+    resolution = str((request.get_json(silent=True) or {}).get("resolution") or "").strip()
+    if not resolution or len(resolution) > 2000:
+        return jsonify({"ok": False, "message": "Describe how the incident was resolved."}), 400
+    incident.update({"status": "resolved", "resolution": resolution, "resolvedBy": session.get("ministry_id"), "resolvedAt": _now_iso()})
+    _pilot_event(pilot, "incident_resolved", "ministry", {"incidentId": incident_id, "severity": incident["severity"]})
+    return _pilot_saved(store, pilot, "Incident resolved.")
+
+
+@app.post("/api/government/pilots/<pilot_id>/<action>")
+def change_pilot_stage(pilot_id, action):
+    if action not in {"suspend", "resume", "review"}:
+        return jsonify({"ok": False, "message": "Unknown pilot action."}), 404
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    reason = str((request.get_json(silent=True) or {}).get("reason") or "").strip()
+    if len(reason) > 2000:
+        return jsonify({"ok": False, "message": "Reason must be under 2,000 characters."}), 400
+    if action == "suspend":
+        error = _stage_error(pilot, {"active"}, "suspend the pilot")
+        if error:
+            return error
+        if not reason:
+            return jsonify({"ok": False, "message": "Record why the pilot is being suspended."}), 400
+        pilot["stage"] = "suspended"
+        message = "Pilot suspended. The startup can still report incidents and fixes."
+    elif action == "resume":
+        error = _stage_error(pilot, {"suspended"}, "resume the pilot")
+        if error:
+            return error
+        if not reason:
+            return jsonify({"ok": False, "message": "Record why it is safe to resume."}), 400
+        if any(item["status"] == "open" and item["severity"] == "Critical" for item in pilot["incidents"]):
+            return jsonify({"ok": False, "message": "Resolve every open critical incident before resuming."}), 409
+        pilot["stage"] = "active"
+        message = "Pilot resumed."
+    else:
+        error = _stage_error(pilot, {"active"}, "start the results review")
+        if error:
+            return error
+        pilot["stage"] = "review"
+        message = "Results review started. Reporting is paused; the evaluation board can now record its decision."
+    _pilot_event(pilot, {"suspend": "suspended", "resume": "resumed", "review": "review_started"}[action], "ministry", {"reason": reason})
+    return _pilot_saved(store, pilot, message)
+
+
+@app.post("/api/government/pilots/<pilot_id>/decision")
+def record_pilot_decision(pilot_id):
+    store, pilot, _challenge, error = _load_ministry_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, {"review"}, "record the final decision")
+    if error:
+        return error
+    payload = request.get_json(silent=True) or {}
+    decision = str(payload.get("decision") or "")
+    if decision not in pilot_engine.DECISIONS:
+        return jsonify({"ok": False, "message": "Choose scale, procurement, extend or close."}), 400
+    rationale = str(payload.get("rationale") or "").strip()
+    if not rationale or len(rationale) > 4000:
+        return jsonify({"ok": False, "message": "Record the evaluation board's rationale."}), 400
+    scorecard = pilot_engine.results_scorecard(pilot, _today())
+    override = str(payload.get("overrideReason") or "").strip()
+    if decision != scorecard["recommendation"] and not override:
+        return jsonify({"ok": False, "message": f"The evidence points to '{scorecard['recommendation_label']}'. Record why the board is deciding differently."}), 400
+    if decision in {"scale", "procurement"} and not any(item["status"] == "verified" for item in pilot["measurements"]):
+        return jsonify({"ok": False, "message": "At least one verified KPI measurement is needed before scaling or procurement."}), 409
+    record = {
+        "decision": decision,
+        "label": pilot_engine.DECISIONS[decision],
+        "rationale": rationale,
+        "overrideReason": override,
+        "recommendation": scorecard["recommendation"],
+        "attainment": scorecard["attainment_pct"],
+        "decidedBy": session.get("ministry_id"),
+        "decidedAt": _now_iso(),
+    }
+    if decision == "extend":
+        try:
+            new_end = pilot_engine.parse_date(payload.get("newEndDate"), "New end date")
+        except ValueError as validation_error:
+            return jsonify({"ok": False, "message": str(validation_error)}), 400
+        current_end = pilot_engine.parse_date(pilot["agreement"]["endDate"], "End date")
+        if not current_end < new_end <= current_end + timedelta(days=365):
+            return jsonify({"ok": False, "message": "An extension must end after the current end date and within one year of it."}), 400
+        record["previousEndDate"] = current_end.isoformat()
+        record["newEndDate"] = new_end.isoformat()
+        pilot["agreement"]["endDate"] = new_end.isoformat()
+        pilot["stage"] = "active"
+    else:
+        pilot["stage"] = decision if decision != "close" else "closed"
+    pilot["decisions"].append(record)
+    _pilot_event(pilot, "board_decision", "ministry", {"decision": decision, "override": bool(override)})
+    return _pilot_saved(store, pilot, f"Decision recorded: {record['label']}.")
+
+
+@app.get("/startup/pilots/<pilot_id>")
+@session_required("startup")
+def startup_pilot_page(pilot_id):
+    pilot = _read_pilot_store().get(pilot_id)
+    if not pilot or pilot.get("businessId") != session.get("business_id") or not pilot.get("agreementVersion"):
+        return ("Pilot not found", 404)
+    return render_template("startup-pilot.htm", pilot=pilot, view=_pilot_view(pilot), severities=pilot_engine.INCIDENT_SEVERITIES, today=_today().isoformat())
+
+
+@app.get("/api/startup/pilots/<pilot_id>")
+def startup_pilot_api(pilot_id):
+    _store, pilot, error = _load_startup_pilot(pilot_id)
+    if error:
+        return error
+    view = _pilot_view(pilot)
+    visible = {key: value for key, value in pilot.items() if key not in {"agreementDraft", "history"}}
+    return jsonify({"ok": True, "pilot": visible, "health": view["health"], "stage_label": view["stage_label"]})
+
+
+@app.post("/api/startup/pilots/<pilot_id>/agreement/respond")
+def startup_respond_to_pilot_agreement(pilot_id):
+    store, pilot, error = _load_startup_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, {"awaiting_acceptance"}, "respond to the agreement")
+    if error:
+        return error
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get("action") or "")
+    if action == "accept":
+        name = str(payload.get("signatoryName") or "").strip()
+        designation = str(payload.get("designation") or "").strip()
+        if not name or not designation or len(name) > 120 or len(designation) > 120:
+            return jsonify({"ok": False, "message": "Enter the authorised signatory's name and designation."}), 400
+        if payload.get("confirm") is not True:
+            return jsonify({"ok": False, "message": "Confirm that you accept the agreement on behalf of the startup."}), 400
+        if int(payload.get("version") or 0) != pilot["agreementVersion"]:
+            return jsonify({"ok": False, "message": "The agreement has changed since you opened it. Reload and review the latest version."}), 409
+        pilot["acceptance"] = {"signatoryName": name, "designation": designation, "version": pilot["agreementVersion"], "acceptedAt": _now_iso()}
+        pilot["stage"] = "readiness"
+        _pilot_event(pilot, "agreement_accepted", "startup", {"version": pilot["agreementVersion"]})
+        return _pilot_saved(store, pilot, "Agreement accepted. The ministry will complete readiness checks before go-live.")
+    if action == "request_changes":
+        comments = str(payload.get("comments") or "").strip()
+        if not comments or len(comments) > 4000:
+            return jsonify({"ok": False, "message": "Describe the changes you are requesting."}), 400
+        pilot["changeRequests"].append({"version": pilot["agreementVersion"], "comments": comments, "at": _now_iso()})
+        pilot["stage"] = "draft"
+        _pilot_event(pilot, "changes_requested", "startup", {"version": pilot["agreementVersion"]})
+        return _pilot_saved(store, pilot, "Change request sent to the ministry.")
+    return jsonify({"ok": False, "message": "Choose Accept or Request changes."}), 400
+
+
+@app.post("/api/startup/pilots/<pilot_id>/reports")
+def startup_submit_pilot_report(pilot_id):
+    store, pilot, error = _load_startup_pilot(pilot_id)
+    if error:
+        return error
+    error = _stage_error(pilot, {"active", "suspended"}, "submit a progress report")
+    if error:
+        return error
+    try:
+        report = pilot_engine.validate_report(pilot["agreement"], pilot["milestoneStates"], request.get_json(silent=True) or {}, _today())
+    except ValueError as validation_error:
+        return jsonify({"ok": False, "message": str(validation_error)}), 400
+    report_id = f"RPT-{len(pilot['reports']) + 1:03d}"
+    now = _now_iso()
+    pilot["reports"].append({"reportId": report_id, "summary": report["summary"], "blockers": report["blockers"], "submittedAt": now})
+    for item in report["measurements"]:
+        pilot["measurements"].append({**item, "measurementId": f"MEA-{len(pilot['measurements']) + 1:04d}", "reportId": report_id, "status": "pending", "recordedAt": now})
+    for item in report["milestoneClaims"]:
+        pilot["milestoneStates"][item["milestoneId"]] = {"status": "claimed", "evidence": item["evidence"], "claimedAt": now, "reportId": report_id}
+    for item in report["incidents"]:
+        pilot["incidents"].append({**item, "incidentId": f"INC-{len(pilot['incidents']) + 1:03d}", "reportId": report_id, "status": "open", "reportedAt": now})
+    _pilot_event(pilot, "report_submitted", "startup", {
+        "reportId": report_id,
+        "measurements": len(report["measurements"]),
+        "claims": len(report["milestoneClaims"]),
+        "incidents": len(report["incidents"]),
+    })
+    if any(item["severity"] == "Critical" for item in report["incidents"]):
+        _pilot_event(pilot, "suspension_recommended", "startup", {"reportId": report_id, "reason": "Critical incident reported"})
+    return _pilot_saved(store, pilot, f"Report {report_id} submitted. The ministry will verify your readings and claims.")
 
 
 @app.post("/api/contracts/<contract_id>/bids")
@@ -1444,7 +3607,7 @@ def submit_contract_bid(contract_id):
 @app.get("/ministry-portal")
 @session_required("ministry")
 def ministry_portal():
-    return render_template("ministry-portal.htm")
+    return render_template("ministry-portal.htm", challenges=_serialize_challenges())
 
 
 @app.get("/api/network")

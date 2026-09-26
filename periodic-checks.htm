@@ -4,13 +4,71 @@
 <main class="container dashboard-shell">
     <section class="dashboard-header">
         <div>
-            <div class="kicker">Government workspace</div>
+            <div class="kicker">Ministry workspace</div>
             <h1>Periodic checks</h1>
-            <p class="dashboard-subtitle">Schedule startup progress reports and review submissions separately from challenge creation.</p>
+            <p class="dashboard-subtitle">Everything due across your running sandboxes and pilots: progress reports, readings and milestones to verify, payments to release and open incidents.</p>
         </div>
-        <a class="button outline" href="/government-dashboard">Back to challenges</a>
+        <div class="hero-actions">
+            <a class="button outline" href="/sandbox">Sandbox</a>
+            <a class="button outline" href="/pilots">Pilots</a>
+        </div>
     </section>
 
+    <section class="stat-grid pc-stats" aria-label="Monitoring summary">
+        <article class="stat-card {{ 'pc-alert' if summary.overdue }}"><span class="stat-label">Reports overdue</span><strong>{{ summary.overdue }}</strong></article>
+        <article class="stat-card"><span class="stat-label">Due now or this week</span><strong>{{ summary.due_soon }}</strong></article>
+        <article class="stat-card"><span class="stat-label">Waiting for verification</span><strong>{{ summary.to_verify }}</strong></article>
+        <article class="stat-card {{ 'pc-alert' if summary.serious_incidents }}"><span class="stat-label">Serious incidents open</span><strong>{{ summary.serious_incidents }}</strong></article>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Action queue</h2><span class="form-note">Most urgent first · {{ queue | length }} item{{ '' if queue | length == 1 else 's' }}</span></div>
+        {% if queue %}
+        <ol class="pc-queue">
+            {% for item in queue %}
+            <li class="pc-{{ item.kind }}">
+                <span class="pc-kind">{{ {'critical': 'Urgent', 'action': 'Action', 'warning': 'Watch', 'upcoming': 'Upcoming', 'info': 'Waiting'}[item.kind] }}</span>
+                <div>
+                    <strong>{{ item.message }}</strong>
+                    <small>{{ item.row.startupName }} · {{ item.row.attention.mode }} · {{ item.row.challengeTitle }}{% if item.date %} · {{ item.date }}{% endif %}</small>
+                </div>
+                <a class="button outline small" href="/government-pilots/{{ item.row.pilotId }}">Open</a>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <p class="form-note">Nothing needs attention. Items appear here as startups report, claim milestones or raise incidents.</p>
+        {% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Reporting calendar</h2><span class="form-note">Running sandboxes and pilots, next report first · today {{ today }}</span></div>
+        {% if monitored %}
+        <div class="comparison-table-wrap"><table class="comparison-table adv-table">
+            <thead><tr><th>Startup</th><th>Type</th><th>Next report</th><th>Last report</th><th>To verify</th><th>Health</th><th>Ends</th><th></th></tr></thead>
+            <tbody>
+            {% for row in monitored %}
+            {% set report = row.attention.report %}
+            <tr>
+                <td data-label="Startup">{{ row.startupName }}<small>{{ row.challengeTitle }}</small></td>
+                <td data-label="Type">{{ row.attention.mode }}{% if row.stage == 'suspended' %}<small class="plt-late">Suspended</small>{% endif %}</td>
+                <td data-label="Next report">{{ report.next_due or '—' }}<small class="pc-status pc-status-{{ report.status | lower | replace(' ', '-') }}">{{ report.status }}{% if report.days_overdue %} · {{ report.days_overdue }} days{% endif %}</small></td>
+                <td data-label="Last report">{{ report.last_report or 'None yet' }}</td>
+                <td data-label="To verify">{{ row.attention.counts.pending_readings }} reading{{ '' if row.attention.counts.pending_readings == 1 else 's' }}<small>{{ row.attention.counts.claims }} milestone claim{{ '' if row.attention.counts.claims == 1 else 's' }}</small></td>
+                <td data-label="Health"><span class="plt-rag plt-rag-{{ row.rag | lower }}">{{ row.rag }}</span></td>
+                <td data-label="Ends">{{ row.endDate }}{% if row.attention.days_left is not none %}<small>{{ row.attention.days_left }} days</small>{% endif %}</td>
+                <td data-label=""><a class="button outline small" href="/government-pilots/{{ row.pilotId }}">Open</a></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table></div>
+        {% else %}
+        <p class="form-note">No sandbox or pilot is running yet. Programmes appear here once they go live.</p>
+        {% endif %}
+    </section>
+
+    <h2 class="plt-legacy-head">Contract report schedules</h2>
+    <p class="form-note">Free-form reporting schedules for challenges and directly assigned contracts.</p>
     <section class="challenge-panel">
         <div class="panel-head"><h2>Reporting schedules</h2></div>
         {% if challenges %}
@@ -80,6 +138,8 @@
         };
     });
 
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
     async function loadReports() {
         const response = await fetch('/api/periodic-reports');
         const result = await response.json();
@@ -90,17 +150,17 @@
         reportList.innerHTML = result.reports.map(item => {
             const report = item.report;
             const reviewControls = report.status === 'Submitted for Government Review'
-                ? `<form class="report-review-form" data-report-id="${report.reportId}">
+                ? `<form class="report-review-form" data-report-id="${escapeHtml(report.reportId)}">
                     <select name="decision"><option>Accepted</option><option>Changes Requested</option></select>
                     <input name="feedback" placeholder="Feedback for the startup">
                     <button class="button small" type="submit">Save Review</button>
                 </form>`
-                : `<span class="status-badge">${report.status}</span>`;
+                : `<span class="status-badge">${escapeHtml(report.status)}</span>`;
             return `<article class="report-review-card">
-                <div><strong>${report.challengeId}</strong><h3>${item.challengeTitle}</h3><p>${report.summary}</p></div>
-                <div class="report-meta"><span>${report.startupId}</span><span>${report.submittedAt}</span><span>${report.status}</span></div>
-                ${report.progress ? `<p><strong>Progress:</strong> ${report.progress}</p>` : ''}
-                ${report.blockers ? `<p><strong>Blockers:</strong> ${report.blockers}</p>` : ''}
+                <div><strong>${escapeHtml(report.challengeId)}</strong><h3>${escapeHtml(item.challengeTitle)}</h3><p>${escapeHtml(report.summary)}</p></div>
+                <div class="report-meta"><span>${escapeHtml(report.startupId)}</span><span>${escapeHtml(report.submittedAt)}</span><span>${escapeHtml(report.status)}</span></div>
+                ${report.progress ? `<p><strong>Progress:</strong> ${escapeHtml(report.progress)}</p>` : ''}
+                ${report.blockers ? `<p><strong>Blockers:</strong> ${escapeHtml(report.blockers)}</p>` : ''}
                 ${reviewControls}
             </article>`;
         }).join('');

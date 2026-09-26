@@ -1,0 +1,108 @@
+{% extends "base.htm" %}
+
+{% block content %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Ministry workspace</div>
+            <h1>{{ page.title }}</h1>
+            <p class="dashboard-subtitle">{{ page.subtitle }}</p>
+        </div>
+        <a class="button outline" href="/periodic-checks">Periodic checks</a>
+    </section>
+
+    <section class="stat-grid" aria-label="{{ page.title }} summary">
+        <article class="stat-card"><span class="stat-label">Being set up</span><strong>{{ stages.setup }}</strong></article>
+        <article class="stat-card"><span class="stat-label">Running</span><strong>{{ stages.running }}</strong></article>
+        <article class="stat-card"><span class="stat-label">In results review</span><strong>{{ stages.review }}</strong></article>
+        <article class="stat-card"><span class="stat-label">Decided</span><strong>{{ stages.completed }}</strong></article>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>{{ page.heading }}</h2><span class="form-note">{{ rows | length }} on your challenges</span></div>
+        {% if rows %}
+        <div class="challenge-list">
+            {% for row in rows %}
+            {% set att = row.attention %}
+            <article class="challenge-card prg-card">
+                <div class="challenge-card-top">
+                    <div>
+                        <span class="challenge-id">{{ row.pilotId }}</span>
+                        <h3><a href="/government-pilots/{{ row.pilotId }}">{{ row.startupName }}</a></h3>
+                        <p class="form-note">{{ row.challengeTitle }}</p>
+                    </div>
+                    <span class="plt-stage plt-stage-{{ row.stage }}">{{ row.stageLabel }}</span>
+                </div>
+
+                <dl class="prg-facts">
+                    {% if mode == 'Sandbox' %}
+                    <div><dt>Environment</dt><dd>{{ row.sites or 'Not yet defined' }}</dd></div>
+                    {% else %}
+                    <div><dt>Sites</dt><dd>{{ row.sites or 'Not yet defined' }}</dd></div>
+                    {% endif %}
+                    <div><dt>Period</dt><dd>{% if row.startDate %}{{ row.startDate }} to {{ row.endDate }}{% if att.days_left is not none %}<small>{{ att.days_left }} days left</small>{% endif %}{% else %}Agreement not sent{% endif %}</dd></div>
+                    {% if row.stage == 'readiness' %}
+                    <div><dt>Readiness</dt><dd>{{ row.readiness_done }} of {{ row.readiness_total }} checks<span class="plt-bar"><i style="width: {{ (row.readiness_done / row.readiness_total * 100) if row.readiness_total else 0 }}%"></i></span></dd></div>
+                    {% endif %}
+                    {% if row.rag is defined %}
+                    <div><dt>Health</dt><dd><span class="plt-rag plt-rag-{{ row.rag | lower }}">{{ row.rag }}</span> <small>{{ row.health }} / 100</small></dd></div>
+                    <div><dt>KPI targets achieved</dt><dd>{{ '%.0f%%' | format(row.attainment) }}<span class="plt-bar"><i style="width: {{ [row.attainment, 100] | min }}%"></i></span></dd></div>
+                    <div><dt>Paid</dt><dd>₹{{ '{:,.0f}'.format(row.released) }}<small>of ₹{{ '{:,.0f}'.format(row.budget) }}</small></dd></div>
+                    {% endif %}
+                    {% if att.report.next_due %}
+                    <div><dt>Next report</dt><dd>{{ att.report.next_due }}<small class="{{ 'plt-late' if att.report.status == 'Overdue' }}">{{ att.report.status }}</small></dd></div>
+                    {% endif %}
+                </dl>
+
+                {% set urgent = att['items'] | selectattr('kind', 'in', ['critical', 'action']) | list %}
+                {% if urgent %}
+                <ul class="prg-attention">
+                    {% for item in urgent[:4] %}<li class="prg-{{ item.kind }}">{{ item.message }}{% if item.date %} <small>{{ item.date }}</small>{% endif %}</li>{% endfor %}
+                    {% if urgent | length > 4 %}<li class="prg-more">and {{ urgent | length - 4 }} more</li>{% endif %}
+                </ul>
+                {% endif %}
+                <div class="card-actions"><a class="button small" href="/government-pilots/{{ row.pilotId }}">Open {{ page.noun }} workspace</a></div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state"><p>No {{ page.noun }} programmes yet. {% if waiting %}Start one below for a selected startup.{% else %}Confirm a final selection on one of your challenges first.{% endif %}</p></div>
+        {% endif %}
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head"><h2>Start a {{ page.noun }}</h2><span class="form-note">Startups confirmed in final selection without a sandbox or pilot yet</span></div>
+        {% if waiting %}
+        <div class="comparison-table-wrap"><table class="comparison-table adv-table">
+            <thead><tr><th>Startup</th><th>Challenge</th><th></th></tr></thead>
+            <tbody>
+            {% for item in waiting %}
+            <tr>
+                <td data-label="Startup">{{ item.startup_name }}<small>{{ item.application_id }}</small></td>
+                <td data-label="Challenge">{{ item.challengeTitle }}<small>{{ item.challengeId }}</small></td>
+                <td data-label=""><button class="button small" type="button" data-start-programme data-challenge="{{ item.challengeId }}" data-application="{{ item.application_id }}">Start {{ page.noun }}</button></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table></div>
+        <p class="form-message" data-status role="status"></p>
+        {% else %}
+        <p class="form-note">Every selected startup already has a sandbox or pilot. New ones appear here after a final selection is confirmed.</p>
+        {% endif %}
+    </section>
+</main>
+<script>
+    document.querySelectorAll('[data-start-programme]').forEach(button => button.addEventListener('click', async () => {
+        const status = document.querySelector('[data-status]');
+        button.disabled = true;
+        const response = await fetch(`/api/government/challenges/${button.dataset.challenge}/pilots`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ applicationId: button.dataset.application, mode: {{ mode | tojson }} })
+        });
+        const result = await response.json();
+        status.textContent = result.message;
+        if (response.ok) window.location.assign(`/government-pilots/${result.pilotId}`);
+        else button.disabled = false;
+    }));
+</script>
+{% endblock %}

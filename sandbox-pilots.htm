@@ -1,0 +1,218 @@
+{% extends "base.htm" %}
+
+{% block content %}
+{% set design_count = program_count %}
+{% set active_count = stage_counts.active %}
+{% set scaled_count = stage_counts.scaled %}
+{% set terminated_count = stage_counts.terminated %}
+<main class="container dashboard-shell">
+    <section class="dashboard-header">
+        <div>
+            <div class="kicker">Ministry workspace &middot; Advanced</div>
+            <h1>Direct-assignment programmes</h1>
+            <p class="dashboard-subtitle">Design a controlled sandbox or a limited real-world pilot for an assigned contract, track milestones, and record the stage-gate decision that moves it toward scale.</p>
+        </div>
+        <a class="button outline" href="/ministry-portal">Back to workspace</a>
+    </section>
+
+    <p class="adv-notice">Sandboxes and pilots for startups chosen through final selection now have their own pages: <a href="/sandbox"><strong>Sandbox</strong></a> and <a href="/pilots"><strong>Pilots</strong></a>. This page covers only contracts assigned directly.</p>
+
+    <h2 class="plt-legacy-head">Direct-assignment programmes</h2>
+    <p class="form-note">Contracts assigned directly, outside the application and final-selection process.</p>
+    <section class="stat-grid" aria-label="Sandbox and pilot summary">
+        <article class="stat-card"><span class="stat-label">Programs designed</span><strong>{{ design_count }}</strong></article>
+        <article class="stat-card"><span class="stat-label">Active</span><strong>{{ active_count }}</strong></article>
+        <article class="stat-card"><span class="stat-label">Scaled</span><strong>{{ scaled_count }}</strong></article>
+        <article class="stat-card"><span class="stat-label">Terminated</span><strong>{{ terminated_count }}</strong></article>
+    </section>
+
+    <section class="challenge-panel">
+        <div class="panel-head">
+            <h2>Assigned contracts</h2>
+            <span class="form-note">Only contracts with an assigned startup can start a sandbox or pilot.</span>
+        </div>
+
+        {% if challenges %}
+        <div class="challenge-list">
+            {% for challenge in challenges %}
+            {% set program = challenge.sandboxPilot %}
+            <article class="challenge-card sandbox-card" id="sandbox-{{ challenge.challengeId or challenge.id }}">
+                <div class="challenge-card-top">
+                    <div>
+                        <span class="challenge-id">{{ challenge.challengeId or 'GOV-00000' }}</span>
+                        <h3>{{ challenge.title or 'Untitled challenge' }}</h3>
+                    </div>
+                    {% if program %}
+                    <span class="stage-pill {{ program.stage | lower }}">{{ program.mode }} &middot; {{ program.stage }}</span>
+                    {% else %}
+                    <span class="stage-pill not-designed">Not designed</span>
+                    {% endif %}
+                </div>
+                <div class="challenge-meta">
+                    <span>{{ challenge.department or 'Department' }}</span>
+                    <span>Assigned startup: {{ challenge.assignedStartupId or '—' }}</span>
+                    <span>{{ challenge.updatedAt[:10] if challenge.updatedAt else '—' }}</span>
+                </div>
+
+                <form class="sandbox-design-form" data-sandbox-form="{{ challenge.challengeId or challenge.id }}">
+                    <strong class="full-field">{{ 'Update design' if program else 'Design a sandbox or pilot' }}</strong>
+                    <label>Mode
+                        <select name="mode">
+                            <option value="Sandbox" {% if program and program.mode == 'Sandbox' %}selected{% endif %}>Sandbox (controlled test)</option>
+                            <option value="Pilot" {% if program and program.mode == 'Pilot' %}selected{% endif %}>Pilot (limited live rollout)</option>
+                        </select>
+                    </label>
+                    <label>Cohort size <input name="cohortSize" type="number" min="0" value="{{ program.cohortSize if program else '' }}" placeholder="e.g. 50 users / 3 districts"></label>
+                    <label>Monitoring cadence
+                        <select name="monitoringCadence">
+                            <option {% if program and program.monitoringCadence == 'Weekly' %}selected{% endif %}>Weekly</option>
+                            <option {% if not program or program.monitoringCadence == 'Monthly' %}selected{% endif %}>Monthly</option>
+                            <option {% if program and program.monitoringCadence == 'Biweekly' %}selected{% endif %}>Biweekly</option>
+                        </select>
+                    </label>
+                    <label>Start date <input name="startDate" type="date" value="{{ program.startDate if program else '' }}" required></label>
+                    <label>Target end date <input name="endDate" type="date" value="{{ program.endDate if program else '' }}"></label>
+                    <label>Budget ceiling (&#8377;) <input name="budgetCeiling" type="number" min="0" step="0.01" value="{{ program.budgetCeiling if program else '' }}"></label>
+                    <label class="full-field">Scope of the controlled test <textarea name="scope" rows="2" placeholder="What is being tested, where, and with whom">{{ program.scope if program else '' }}</textarea></label>
+                    <label class="full-field">Success criteria <textarea name="successCriteria" rows="2" placeholder="Measurable criteria required to approve scale-up">{{ program.successCriteria if program else '' }}</textarea></label>
+                    <label class="full-field">Risk safeguards <textarea name="riskSafeguards" rows="2" placeholder="Data limits, rollback plan, oversight controls">{{ program.riskSafeguards if program else '' }}</textarea></label>
+                    <label class="full-field">Exit criteria <textarea name="exitCriteria" rows="2" placeholder="Conditions that trigger an early termination">{{ program.exitCriteria if program else '' }}</textarea></label>
+                    <button class="button small" type="submit" {% if not challenge.assignedStartupId %}disabled{% endif %}>{{ 'Save design' if program else 'Start sandbox / pilot' }}</button>
+                    <span class="form-message" data-sandbox-status role="status"></span>
+                </form>
+
+                {% if program %}
+                <div class="milestone-list" aria-label="Milestones">
+                    {% if program.milestones %}
+                        {% for milestone in program.milestones %}
+                        <div class="milestone-item">
+                            <div>
+                                <strong>{{ milestone.title }}</strong>
+                                <div class="milestone-meta">Due {{ milestone.dueDate }}{% if milestone.notes %} &middot; {{ milestone.notes }}{% endif %}</div>
+                            </div>
+                            <span class="stage-pill {{ milestone.status | lower | replace(' ', '-') }}">{{ milestone.status }}</span>
+                            <form class="milestone-status-form" data-milestone-form="{{ challenge.challengeId or challenge.id }}" data-milestone-id="{{ milestone.milestoneId }}">
+                                <select name="status">
+                                    {% for option in ['Pending', 'On Track', 'At Risk', 'Completed'] %}
+                                    <option {% if milestone.status == option %}selected{% endif %}>{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button class="link-button" type="submit">Update</button>
+                            </form>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                    <div class="milestone-item"><span class="form-note">No milestones scheduled yet.</span></div>
+                    {% endif %}
+                </div>
+
+                <form class="milestone-form" data-milestone-add-form="{{ challenge.challengeId or challenge.id }}">
+                    <label>Milestone title <input name="title" placeholder="e.g. Mid-point safety review" required></label>
+                    <label>Due date <input name="dueDate" type="date" required></label>
+                    <label class="full-field">Notes <input name="notes" placeholder="Optional context"></label>
+                    <button class="button outline small" type="submit">Add milestone</button>
+                </form>
+
+                <form class="decision-form" data-decision-form="{{ challenge.challengeId or challenge.id }}">
+                    <label>Stage-gate decision
+                        <select name="decision">
+                            <option value="Move to Active" {% if program.stage != 'Design' %}disabled{% endif %}>Move to Active</option>
+                            <option value="Approve to Scale" {% if program.stage != 'Active' %}disabled{% endif %}>Approve to Scale</option>
+                            <option value="Extend Program" {% if program.stage != 'Active' %}disabled{% endif %}>Extend Program</option>
+                            <option value="Terminate Program" {% if program.stage not in ['Design', 'Active'] %}disabled{% endif %}>Terminate Program</option>
+                        </select>
+                    </label>
+                    <label>Rationale <input name="rationale" placeholder="Evidence supporting this decision" required></label>
+                    <button class="button small" type="submit" {% if program.stage in ['Scaled', 'Terminated'] %}disabled{% endif %}>Record decision</button>
+                    <label class="full-field" data-extend-field hidden>New end date <input name="newEndDate" type="date"></label>
+                </form>
+
+                {% if program.decisions %}
+                <div class="decision-log" aria-label="Decision history">
+                    {% for decision in program.decisions | reverse %}
+                    <div class="decision-log-item">
+                        <strong>{{ decision.decision }}</strong> — {{ decision.rationale }}
+                        <span>{{ decision.decidedAt }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No contracts are ready for a sandbox or pilot yet. Assign a startup to a challenge from the challenge portfolio first.</p>
+            <a class="button" href="/government-dashboard">Open challenge portfolio</a>
+        </div>
+        {% endif %}
+    </section>
+</main>
+
+<script>
+    document.querySelectorAll('[data-sandbox-form]').forEach(form => {
+        form.onsubmit = async event => {
+            event.preventDefault();
+            const status = form.querySelector('[data-sandbox-status]');
+            const response = await fetch(`/api/challenges/${form.dataset.sandboxForm}/sandbox-pilot`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.fromEntries(new FormData(form)))
+            });
+            const result = await response.json();
+            status.textContent = result.message;
+            if (response.ok) window.location.reload();
+        };
+    });
+
+    document.querySelectorAll('[data-milestone-add-form]').forEach(form => {
+        form.onsubmit = async event => {
+            event.preventDefault();
+            const response = await fetch(`/api/challenges/${form.dataset.milestoneAddForm}/sandbox-pilot/milestones`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.fromEntries(new FormData(form)))
+            });
+            if (response.ok) window.location.reload();
+        };
+    });
+
+    document.querySelectorAll('[data-milestone-form]').forEach(form => {
+        form.onsubmit = async event => {
+            event.preventDefault();
+            const response = await fetch(`/api/challenges/${form.dataset.milestoneForm}/sandbox-pilot/milestones/${form.dataset.milestoneId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.fromEntries(new FormData(form)))
+            });
+            if (response.ok) window.location.reload();
+        };
+    });
+
+    document.querySelectorAll('[data-decision-form]').forEach(form => {
+        const decisionSelect = form.querySelector('select[name="decision"]');
+        const extendField = form.querySelector('[data-extend-field]');
+        const syncExtendField = () => {
+            extendField.hidden = decisionSelect.value !== 'Extend Program';
+        };
+        decisionSelect.addEventListener('change', syncExtendField);
+        syncExtendField();
+
+        form.onsubmit = async event => {
+            event.preventDefault();
+            const response = await fetch(`/api/challenges/${form.dataset.decisionForm}/sandbox-pilot/decision`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.fromEntries(new FormData(form)))
+            });
+            const result = await response.json();
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert(result.message);
+            }
+        };
+    });
+</script>
+{% endblock %}
